@@ -219,7 +219,7 @@ def generate_full_report(
     date_from: str,
     date_to: str,
     period_label: str,
-) -> tuple[str, str]:
+) -> tuple[str, str, dict, dict]:
     from main import (
         fetch_google_ads_data,
         fetch_ga4_data,
@@ -255,7 +255,136 @@ def generate_full_report(
     path = REPORTS_DIR / filename
     path.write_text(report_text, encoding="utf-8")
 
-    return report_text, filename
+    return report_text, filename, ads_data, ga4_data
+
+
+# ─── Wizualizacja raportu ─────────────────────────────────────────────────────
+
+def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga4_data: dict, report_text: str) -> None:
+    import plotly.graph_objects as go
+
+    # Logo
+    logo_path = BASE_DIR / cfg.get("logo_filename", "")
+    if logo_path.exists():
+        col_l, col_m, col_r = st.columns([1, 2, 1])
+        with col_m:
+            st.image(str(logo_path), width=180)
+
+    st.markdown(f"<h1 style='text-align:center'>Raport miesięczny — {client_name}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align:center;color:#888'>Okres: {period_label}</p>", unsafe_allow_html=True)
+    st.markdown("---")
+
+    # ── Google Ads ────────────────────────────────────────────────────────────
+    st.markdown("## 1. Wyniki Google Ads")
+    if ads_data:
+        t = ads_data["totals"]
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric("Wydatki", f"{t['cost_pln']} zł")
+        c2.metric("Kliknięcia", f"{t['clicks']:,}")
+        c3.metric("Wyświetlenia", f"{t['impressions']:,}")
+        c4.metric("Konwersje", f"{int(t['conversions'])}")
+        c5.metric("Koszt/konw.", f"{t['cost_per_conversion_pln']} zł")
+
+        campaigns = ads_data.get("campaigns", [])
+        if campaigns:
+            st.markdown("**Wyniki kampanii:**")
+            names = [c["name"].replace("_", " ") for c in campaigns]
+            fig = go.Figure(data=[
+                go.Bar(name="Wydatki (zł)", x=names, y=[c["cost_pln"] for c in campaigns],
+                       marker_color="#4C78A8"),
+                go.Bar(name="Konwersje", x=names, y=[c["conversions"] for c in campaigns],
+                       marker_color="#F58518"),
+            ])
+            fig.update_layout(
+                barmode="group",
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                margin=dict(t=40, b=20),
+                height=320,
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Tabela kampanii
+            header = ["Kampania", "Wydatki (zł)", "Kliknięcia", "CTR", "Konwersje", "Koszt/konw."]
+            rows = [[c["name"], f"{c['cost_pln']} zł", c["clicks"],
+                     f"{c['ctr_pct']}%", c["conversions"], f"{c['cost_per_conversion_pln']} zł"]
+                    for c in campaigns]
+            fig_t = go.Figure(data=[go.Table(
+                header=dict(values=header, fill_color="#4C78A8", font=dict(color="white", size=12), align="left"),
+                cells=dict(values=list(zip(*rows)) if rows else [[] for _ in header],
+                           fill_color=[["#f9f9f9", "white"] * len(rows)],
+                           align="left", font=dict(size=11)),
+            )])
+            fig_t.update_layout(margin=dict(t=10, b=10), height=120 + len(campaigns) * 30)
+            st.plotly_chart(fig_t, use_container_width=True)
+    else:
+        st.info("Brak danych Google Ads za ten okres.")
+
+    st.markdown("---")
+
+    # ── GA4 ───────────────────────────────────────────────────────────────────
+    st.markdown("## 2. Ruch na stronie — Google Analytics")
+    if ga4_data:
+        g = ga4_data["general"]
+        dur = g["avg_session_duration_sec"]
+        dur_str = f"{dur // 60}m {dur % 60}s"
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Użytkownicy", f"{g['users']:,}")
+        c2.metric("Sesje", f"{g['sessions']:,}")
+        c3.metric("Śr. czas wizyty", dur_str)
+        c4.metric("Wsp. zaangażowania", f"{100 - g['bounce_rate_pct']:.1f}%")
+
+        col_pie, col_conv = st.columns(2)
+
+        # Źródła ruchu — wykres kołowy
+        sources = ga4_data.get("sources", [])
+        if sources:
+            with col_pie:
+                st.markdown("**Źródła ruchu:**")
+                fig = go.Figure(data=[go.Pie(
+                    labels=[s["channel"] for s in sources],
+                    values=[s["sessions"] for s in sources],
+                    hole=0.4,
+                    textinfo="label+percent",
+                )])
+                fig.update_layout(
+                    showlegend=False,
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    height=280,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+        # Konwersje — wykres poziomy
+        events = ga4_data.get("conversion_events", [])
+        if events:
+            with col_conv:
+                st.markdown("**Konwersje na stronie:**")
+                top = events[:8]
+                labels = [e["event"].replace("_", " ").replace("restauracja biala dama (web) ", "") for e in top]
+                fig = go.Figure(data=[go.Bar(
+                    x=[e["conversions"] for e in top],
+                    y=labels,
+                    orientation="h",
+                    marker_color="#F58518",
+                )])
+                fig.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=280,
+                    xaxis=dict(title="Liczba"),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Brak danych GA4 za ten okres.")
+
+    st.markdown("---")
+
+    # ── Analiza tekstowa ──────────────────────────────────────────────────────
+    st.markdown("## 3. Analiza i rekomendacje")
+    st.markdown(report_text)
 
 
 # ─── Strona: Generuj raport ───────────────────────────────────────────────────
@@ -296,12 +425,15 @@ def page_generate():
         else:
             with st.spinner("Pobieranie danych z Google Ads i GA4..."):
                 try:
-                    report_text, filename = generate_full_report(
+                    report_text, filename, ads_data, ga4_data = generate_full_report(
                         selected_client, report_type, date_from, date_to, period_label
                     )
                     st.session_state.report_text = report_text
                     st.session_state.report_filename = filename
                     st.session_state.report_client = selected_name
+                    st.session_state.report_ads_data = ads_data
+                    st.session_state.report_ga4_data = ga4_data
+                    st.session_state.report_period = period_label
                     st.success(f"Raport wygenerowany i zapisany jako `{filename}`")
                 except Exception as e:
                     st.error(f"Błąd generowania raportu: {e}")
@@ -310,7 +442,6 @@ def page_generate():
     if st.session_state.report_text:
         st.markdown("---")
 
-        # Przyciski akcji
         dl_col, email_col, _ = st.columns([1, 1, 2])
         with dl_col:
             st.download_button(
@@ -322,7 +453,6 @@ def page_generate():
         with email_col:
             recipients = cfg["email"].get("recipients", [])
             smtp_configured = bool(cfg["email"].get("smtp_user") and cfg["email"].get("smtp_password"))
-
             if recipients and smtp_configured:
                 if st.button("✉ Wyślij emailem", use_container_width=True):
                     with st.spinner(f"Wysyłanie do {len(recipients)} odbiorcy/ów..."):
@@ -331,7 +461,7 @@ def page_generate():
                             for r in recipients:
                                 send_report_email(
                                     recipient=r,
-                                    subject=f"Raport marketingowy — {st.session_state.report_client} — {period_label}",
+                                    subject=f"Raport marketingowy — {st.session_state.report_client} — {st.session_state.report_period}",
                                     body=st.session_state.report_text,
                                     smtp_config=cfg["email"],
                                     filename=st.session_state.report_filename,
@@ -340,13 +470,17 @@ def page_generate():
                         except Exception as e:
                             st.error(f"Błąd wysyłania: {e}")
             else:
-                help_text = "Brak odbiorców lub brak konfiguracji SMTP — przejdź do Ustawień."
-                st.button("✉ Wyślij emailem", disabled=True, use_container_width=True, help=help_text)
+                st.button("✉ Wyślij emailem", disabled=True, use_container_width=True,
+                          help="Brak odbiorców lub brak konfiguracji SMTP — przejdź do Ustawień.")
 
-        # Podgląd raportu
         st.markdown("---")
-        st.markdown("#### Podgląd raportu")
-        st.markdown(st.session_state.report_text)
+        render_visual_report(
+            st.session_state.report_client,
+            st.session_state.report_period,
+            st.session_state.get("report_ads_data", {}),
+            st.session_state.get("report_ga4_data", {}),
+            st.session_state.report_text,
+        )
 
 
 # ─── Strona: Klienci ──────────────────────────────────────────────────────────
@@ -502,6 +636,37 @@ def page_settings():
         ga4_creds_path.write_bytes(uploaded.read())
         update_env_key("GOOGLE_APPLICATION_CREDENTIALS", str(ga4_creds_path))
         st.success("Credentials GA4 zapisane. Status GA4 zmienił się na aktywny.")
+        st.rerun()
+
+    # ── Logo ──────────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Logo")
+    st.caption("Logo będzie wyświetlane na górze każdego raportu.")
+
+    logo_filename = cfg.get("logo_filename", "")
+    logo_path = BASE_DIR / logo_filename if logo_filename else None
+
+    if logo_path and logo_path.exists():
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.image(str(logo_path), width=160)
+        with col2:
+            if st.button("Usuń logo"):
+                logo_path.unlink(missing_ok=True)
+                cfg["logo_filename"] = ""
+                save_config(cfg)
+                st.rerun()
+    else:
+        st.info("Brak logo. Wgraj plik PNG lub JPG.")
+
+    uploaded_logo = st.file_uploader("Wgraj logo (PNG lub JPG)", type=["png", "jpg", "jpeg"])
+    if uploaded_logo:
+        ext = Path(uploaded_logo.name).suffix
+        logo_file = BASE_DIR / f"logo{ext}"
+        logo_file.write_bytes(uploaded_logo.read())
+        cfg["logo_filename"] = logo_file.name
+        save_config(cfg)
+        st.success("Logo zapisane.")
         st.rerun()
 
     # ── Odbiorcy emaili ───────────────────────────────────────────────────────

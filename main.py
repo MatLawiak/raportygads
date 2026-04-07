@@ -377,6 +377,7 @@ OKRES: {month_label}
 - Jeśli coś rośnie — podkreśl co na to wpłynęło
 - Nie używaj emoji
 - Krótkie akapity, konkretne zdania
+- Kampanie wstrzymane (status PAUSED/wstrzymana) opisuj tylko jeśli miały wyniki — NIE sugeruj ich włączenia ani zmian w nich
 
 === FORMAT RAPORTU (trzymaj się go ściśle) ===
 
