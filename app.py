@@ -262,13 +262,18 @@ def generate_full_report(
 
 def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga4_data: dict, report_text: str) -> None:
     import plotly.graph_objects as go
+    import base64
 
     # Logo
-    logo_path = BASE_DIR / cfg.get("logo_filename", "")
-    if logo_path.exists():
+    logo_b64 = cfg.get("logo_b64", "")
+    logo_mime = cfg.get("logo_mime", "image/png")
+    if logo_b64:
         col_l, col_m, col_r = st.columns([1, 2, 1])
         with col_m:
-            st.image(str(logo_path), width=180)
+            st.markdown(
+                f'<img src="data:{logo_mime};base64,{logo_b64}" style="max-width:180px;display:block;margin:auto">',
+                unsafe_allow_html=True,
+            )
 
     st.markdown(f"<h1 style='text-align:center'>Raport miesięczny — {client_name}</h1>", unsafe_allow_html=True)
     st.markdown(f"<p style='text-align:center;color:#888'>Okres: {period_label}</p>", unsafe_allow_html=True)
@@ -643,17 +648,23 @@ def page_settings():
     st.subheader("Logo")
     st.caption("Logo będzie wyświetlane na górze każdego raportu.")
 
-    logo_filename = cfg.get("logo_filename", "")
-    logo_path = BASE_DIR / logo_filename if logo_filename else None
+    import base64
 
-    if logo_path and logo_path.exists():
+    logo_b64 = cfg.get("logo_b64", "")
+    logo_mime = cfg.get("logo_mime", "image/png")
+
+    if logo_b64:
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.image(str(logo_path), width=160)
+            st.markdown(
+                f'<img src="data:{logo_mime};base64,{logo_b64}" style="max-width:160px">',
+                unsafe_allow_html=True,
+            )
         with col2:
+            st.markdown("&nbsp;", unsafe_allow_html=True)
             if st.button("Usuń logo"):
-                logo_path.unlink(missing_ok=True)
-                cfg["logo_filename"] = ""
+                cfg["logo_b64"] = ""
+                cfg["logo_mime"] = ""
                 save_config(cfg)
                 st.rerun()
     else:
@@ -661,10 +672,10 @@ def page_settings():
 
     uploaded_logo = st.file_uploader("Wgraj logo (PNG lub JPG)", type=["png", "jpg", "jpeg"])
     if uploaded_logo:
-        ext = Path(uploaded_logo.name).suffix
-        logo_file = BASE_DIR / f"logo{ext}"
-        logo_file.write_bytes(uploaded_logo.read())
-        cfg["logo_filename"] = logo_file.name
+        mime = "image/png" if uploaded_logo.name.endswith(".png") else "image/jpeg"
+        b64 = base64.b64encode(uploaded_logo.read()).decode("utf-8")
+        cfg["logo_b64"] = b64
+        cfg["logo_mime"] = mime
         save_config(cfg)
         st.success("Logo zapisane.")
         st.rerun()
