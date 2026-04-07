@@ -45,6 +45,35 @@ check_password()
 # ─── Ścieżki ──────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent
+
+# ─── Inicjalizacja plików z Secrets (Streamlit Cloud) ─────────────────────────
+
+def init_from_secrets() -> None:
+    """Tworzy pliki konfiguracyjne ze Streamlit Secrets jeśli działamy w chmurze."""
+    try:
+        # google-ads.yaml
+        gads_yaml = st.secrets.get("GOOGLE_ADS_YAML", "")
+        if gads_yaml and not (BASE_DIR / "google-ads.yaml").exists():
+            (BASE_DIR / "google-ads.yaml").write_text(gads_yaml, encoding="utf-8")
+
+        # GA4 credentials JSON
+        ga4_json = st.secrets.get("GA4_CREDENTIALS_JSON", "")
+        if ga4_json and not (BASE_DIR / "ga4_credentials.json").exists():
+            (BASE_DIR / "ga4_credentials.json").write_text(ga4_json, encoding="utf-8")
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(BASE_DIR / "ga4_credentials.json")
+
+        # Klucze API
+        for key in ("OPENAI_API_KEY", "APP_PASSWORD"):
+            val = st.secrets.get(key, "")
+            if val:
+                os.environ[key] = val
+
+    except Exception:
+        pass  # lokalnie st.secrets nie istnieje — pomijamy
+
+
+init_from_secrets()
+
 CONFIG_FILE = BASE_DIR / "config.json"
 REPORTS_DIR = BASE_DIR / "raporty"
 REPORTS_DIR.mkdir(exist_ok=True)
