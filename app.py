@@ -17,6 +17,31 @@ load_dotenv(Path(__file__).parent / ".env")
 
 import streamlit as st
 
+# ─── Logowanie ────────────────────────────────────────────────────────────────
+
+def check_password() -> bool:
+    """Zwraca True jeśli użytkownik podał prawidłowe hasło."""
+    password = os.environ.get("APP_PASSWORD", "")
+    if not password:
+        return True  # brak hasła w .env = tryb lokalny bez ochrony
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown("## Raporty Marketingowe")
+    st.markdown("Podaj hasło dostępu aby kontynuować.")
+    entered = st.text_input("Hasło", type="password", key="password_input")
+    if st.button("Zaloguj", type="primary"):
+        if entered == password:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Nieprawidłowe hasło.")
+    st.stop()
+
+
+check_password()
+
 # ─── Ścieżki ──────────────────────────────────────────────────────────────────
 
 BASE_DIR = Path(__file__).parent
