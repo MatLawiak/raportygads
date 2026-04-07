@@ -258,138 +258,420 @@ def generate_full_report(
     return report_text, filename, ads_data, ga4_data
 
 
+# ─── Helpers wizualne ────────────────────────────────────────────────────────
+
+ACCENT = "#E8630A"        # pomarańczowy jak w PDF Białej Damy
+ACCENT2 = "#1A3A5C"       # granatowy
+LIGHT_BG = "#FFF8F3"
+GRAY = "#F5F5F5"
+
+
+def _header_html(logo_b64: str, logo_mime: str, client_name: str, period: str, date_range: str = "") -> str:
+    logo_html = ""
+    if logo_b64:
+        logo_html = f'<img src="data:{logo_mime};base64,{logo_b64}" style="max-height:70px;margin-bottom:8px">'
+    return f"""
+    <div style="background:linear-gradient(135deg,{ACCENT2} 0%,{ACCENT} 100%);
+                padding:36px 32px;border-radius:12px;text-align:center;margin-bottom:24px">
+        {logo_html}
+        <h1 style="color:white;margin:0;font-size:2rem;font-weight:700">{client_name}</h1>
+        <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:1.1rem">
+            Raport miesięczny &nbsp;|&nbsp; {period}{(' &nbsp;|&nbsp; ' + date_range) if date_range else ''}
+        </p>
+    </div>"""
+
+
+def _kpi_card(label: str, value: str, sub: str = "") -> str:
+    return f"""
+    <div style="background:{LIGHT_BG};border-left:4px solid {ACCENT};border-radius:8px;
+                padding:16px 20px;text-align:center">
+        <p style="margin:0;font-size:0.78rem;color:#888;text-transform:uppercase;letter-spacing:.05em">{label}</p>
+        <p style="margin:4px 0;font-size:1.6rem;font-weight:700;color:{ACCENT2}">{value}</p>
+        {"<p style='margin:0;font-size:0.75rem;color:#aaa'>" + sub + "</p>" if sub else ""}
+    </div>"""
+
+
+def _section_title(text: str) -> None:
+    st.markdown(
+        f"<h2 style='border-bottom:3px solid {ACCENT};padding-bottom:6px;"
+        f"color:{ACCENT2};margin-top:8px'>{text}</h2>",
+        unsafe_allow_html=True,
+    )
+
+
+def _plotly_table(header_vals: list, rows: list, height: int = None) -> None:
+    import plotly.graph_objects as go
+    if not rows:
+        return
+    cols = list(zip(*rows))
+    row_colors = []
+    for i in range(len(rows)):
+        row_colors.append(GRAY if i % 2 == 0 else "white")
+    fig = go.Figure(data=[go.Table(
+        header=dict(
+            values=[f"<b>{h}</b>" for h in header_vals],
+            fill_color=ACCENT2,
+            font=dict(color="white", size=12),
+            align="left",
+            height=32,
+        ),
+        cells=dict(
+            values=list(cols),
+            fill_color=[row_colors],
+            align="left",
+            font=dict(size=11, color="#333"),
+            height=28,
+        ),
+    )])
+    h = height or (80 + len(rows) * 30)
+    fig.update_layout(margin=dict(t=4, b=4, l=0, r=0), height=h)
+    st.plotly_chart(fig, use_container_width=True)
+
+
 # ─── Wizualizacja raportu ─────────────────────────────────────────────────────
 
 def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga4_data: dict, report_text: str) -> None:
     import plotly.graph_objects as go
-    import base64
+    import plotly.express as px
 
-    # Logo
     logo_b64 = cfg.get("logo_b64", "")
     logo_mime = cfg.get("logo_mime", "image/png")
-    if logo_b64:
-        col_l, col_m, col_r = st.columns([1, 2, 1])
-        with col_m:
-            st.markdown(
-                f'<img src="data:{logo_mime};base64,{logo_b64}" style="max-width:180px;display:block;margin:auto">',
-                unsafe_allow_html=True,
-            )
 
-    st.markdown(f"<h1 style='text-align:center'>Raport miesięczny — {client_name}</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align:center;color:#888'>Okres: {period_label}</p>", unsafe_allow_html=True)
-    st.markdown("---")
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Strona tytułowa", "Google Ads", "Google Analytics", "Podsumowanie", "Wnioski i rekomendacje"
+    ])
 
-    # ── Google Ads ────────────────────────────────────────────────────────────
-    st.markdown("## 1. Wyniki Google Ads")
-    if ads_data:
-        t = ads_data["totals"]
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Wydatki", f"{t['cost_pln']} zł")
-        c2.metric("Kliknięcia", f"{t['clicks']:,}")
-        c3.metric("Wyświetlenia", f"{t['impressions']:,}")
-        c4.metric("Konwersje", f"{int(t['conversions'])}")
-        c5.metric("Koszt/konw.", f"{t['cost_per_conversion_pln']} zł")
+    # ══════════════════════════════════════════════════════
+    # TAB 1 — STRONA TYTUŁOWA
+    # ══════════════════════════════════════════════════════
+    with tab1:
+        st.markdown(_header_html(logo_b64, logo_mime, client_name, period_label), unsafe_allow_html=True)
 
-        campaigns = ads_data.get("campaigns", [])
-        if campaigns:
-            st.markdown("**Wyniki kampanii:**")
-            names = [c["name"].replace("_", " ") for c in campaigns]
-            fig = go.Figure(data=[
-                go.Bar(name="Wydatki (zł)", x=names, y=[c["cost_pln"] for c in campaigns],
-                       marker_color="#4C78A8"),
-                go.Bar(name="Konwersje", x=names, y=[c["conversions"] for c in campaigns],
-                       marker_color="#F58518"),
-            ])
-            fig.update_layout(
-                barmode="group",
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02),
-                margin=dict(t=40, b=20),
-                height=320,
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if ads_data and ga4_data:
+            t = ads_data["totals"]
+            g = ga4_data["general"]
+            dur = g["avg_session_duration_sec"]
+            cols = st.columns(4)
+            cols[0].markdown(_kpi_card("Wydatki Google Ads", f"{t['cost_pln']} zł"), unsafe_allow_html=True)
+            cols[1].markdown(_kpi_card("Konwersje", f"{int(t['conversions'])}"), unsafe_allow_html=True)
+            cols[2].markdown(_kpi_card("Użytkownicy strony", f"{g['users']:,}"), unsafe_allow_html=True)
+            cols[3].markdown(_kpi_card("Śr. czas wizyty", f"{dur//60}m {dur%60}s"), unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            f"<p style='text-align:center;color:#aaa;font-size:0.85rem'>Raport przygotowany automatycznie "
+            f"na podstawie danych z Google Ads i Google Analytics 4</p>",
+            unsafe_allow_html=True,
+        )
+
+    # ══════════════════════════════════════════════════════
+    # TAB 2 — GOOGLE ADS
+    # ══════════════════════════════════════════════════════
+    with tab2:
+        st.markdown(_header_html(logo_b64, logo_mime, client_name, period_label), unsafe_allow_html=True)
+        _section_title("Emisja i kliknięcia")
+
+        if ads_data:
+            t = ads_data["totals"]
+            conv_rate = round(t["conversions"] / t["clicks"] * 100, 2) if t["clicks"] else 0
+            cols = st.columns(4)
+            cols[0].markdown(_kpi_card("Kliknięcia", f"{t['clicks']:,}"), unsafe_allow_html=True)
+            cols[1].markdown(_kpi_card("Koszt konwersji", f"{t['cost_per_conversion_pln']} zł"), unsafe_allow_html=True)
+            cols[2].markdown(_kpi_card("Współcz. konwersji", f"{conv_rate}%"), unsafe_allow_html=True)
+            cols[3].markdown(_kpi_card("CTR", f"{t['ctr_pct']}%"), unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            col_l, col_r = st.columns([1, 1])
+
+            # Konwersje per typ — wykres poziomy
+            events = (ads_data.get("conversion_events") or [])
+            if not events:
+                # fallback jeśli brak per-event — pokaż sumę
+                events = []
+
+            # Wykres kampanii — koszt vs konwersje
+            campaigns = ads_data.get("campaigns", [])
+            with col_l:
+                _section_title("Rodzaj konwersji")
+                if events:
+                    top_ev = events[:10]
+                    ev_labels = [
+                        e["event"]
+                        .replace("restauracja_biala_dama_(web)_", "")
+                        .replace("restauracja_biala_dama (web) ", "")
+                        .replace("_", " ")
+                        for e in top_ev
+                    ]
+                    fig = go.Figure(go.Bar(
+                        x=[e["conversions"] for e in top_ev],
+                        y=ev_labels,
+                        orientation="h",
+                        marker=dict(color=ACCENT, line=dict(width=0)),
+                        text=[str(int(e["conversions"])) for e in top_ev],
+                        textposition="outside",
+                    ))
+                    fig.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        margin=dict(t=10, b=10, l=10, r=40),
+                        height=300,
+                        xaxis=dict(showgrid=False, visible=False),
+                        yaxis=dict(autorange="reversed"),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    total_conv = sum(e["conversions"] for e in events)
+                    st.markdown(f"**Suma całkowita: {int(total_conv)}**")
+                else:
+                    st.info("Brak danych konwersji per typ.")
+
+            with col_r:
+                _section_title("Efektywność kampanii")
+                if campaigns:
+                    names = [c["name"].replace("_", " ") for c in campaigns]
+                    fig = go.Figure(data=[
+                        go.Bar(
+                            name="Koszt (zł)",
+                            x=[c["cost_pln"] for c in campaigns],
+                            y=names,
+                            orientation="h",
+                            marker_color=ACCENT2,
+                            opacity=0.85,
+                        ),
+                        go.Bar(
+                            name="Konwersje",
+                            x=[c["conversions"] for c in campaigns],
+                            y=names,
+                            orientation="h",
+                            marker_color=ACCENT,
+                            opacity=0.85,
+                        ),
+                    ])
+                    fig.update_layout(
+                        barmode="group",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        legend=dict(orientation="h", y=1.1),
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        height=300,
+                        xaxis=dict(showgrid=True, gridcolor="#eee"),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
             # Tabela kampanii
-            header = ["Kampania", "Wydatki (zł)", "Kliknięcia", "CTR", "Konwersje", "Koszt/konw."]
-            rows = [[c["name"], f"{c['cost_pln']} zł", c["clicks"],
-                     f"{c['ctr_pct']}%", c["conversions"], f"{c['cost_per_conversion_pln']} zł"]
-                    for c in campaigns]
-            fig_t = go.Figure(data=[go.Table(
-                header=dict(values=header, fill_color="#4C78A8", font=dict(color="white", size=12), align="left"),
-                cells=dict(values=list(zip(*rows)) if rows else [[] for _ in header],
-                           fill_color=[["#f9f9f9", "white"] * len(rows)],
-                           align="left", font=dict(size=11)),
-            )])
-            fig_t.update_layout(margin=dict(t=10, b=10), height=120 + len(campaigns) * 30)
-            st.plotly_chart(fig_t, use_container_width=True)
-    else:
-        st.info("Brak danych Google Ads za ten okres.")
-
-    st.markdown("---")
-
-    # ── GA4 ───────────────────────────────────────────────────────────────────
-    st.markdown("## 2. Ruch na stronie — Google Analytics")
-    if ga4_data:
-        g = ga4_data["general"]
-        dur = g["avg_session_duration_sec"]
-        dur_str = f"{dur // 60}m {dur % 60}s"
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Użytkownicy", f"{g['users']:,}")
-        c2.metric("Sesje", f"{g['sessions']:,}")
-        c3.metric("Śr. czas wizyty", dur_str)
-        c4.metric("Wsp. zaangażowania", f"{100 - g['bounce_rate_pct']:.1f}%")
-
-        col_pie, col_conv = st.columns(2)
-
-        # Źródła ruchu — wykres kołowy
-        sources = ga4_data.get("sources", [])
-        if sources:
-            with col_pie:
-                st.markdown("**Źródła ruchu:**")
-                fig = go.Figure(data=[go.Pie(
-                    labels=[s["channel"] for s in sources],
-                    values=[s["sessions"] for s in sources],
-                    hole=0.4,
-                    textinfo="label+percent",
-                )])
-                fig.update_layout(
-                    showlegend=False,
-                    margin=dict(t=20, b=20, l=20, r=20),
-                    height=280,
-                    paper_bgcolor="rgba(0,0,0,0)",
+            st.markdown("<br>", unsafe_allow_html=True)
+            _section_title("Tabela kampanii")
+            if campaigns:
+                rows = [
+                    [c["name"], f"{c['clicks']:,}", f"{c['impressions']:,}",
+                     f"{c['avg_cpc_pln']} zł", round(c["conversions"], 1),
+                     f"{c['cost_per_conversion_pln']} zł", f"{c['cost_pln']} zł"]
+                    for c in campaigns
+                ]
+                rows.append([
+                    "Suma całkowita",
+                    f"{t['clicks']:,}", f"{t['impressions']:,}",
+                    "—", round(t["conversions"], 1),
+                    f"{t['cost_per_conversion_pln']} zł", f"{t['cost_pln']} zł",
+                ])
+                _plotly_table(
+                    ["Kampania", "Kliknięcia", "Wyświetlenia", "Śr. CPC", "Konwersje", "Koszt konw.", "Koszt"],
+                    rows,
                 )
-                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Brak danych Google Ads za ten okres.")
 
-        # Konwersje — wykres poziomy
-        events = ga4_data.get("conversion_events", [])
-        if events:
-            with col_conv:
-                st.markdown("**Konwersje na stronie:**")
-                top = events[:8]
-                labels = [e["event"].replace("_", " ").replace("restauracja biala dama (web) ", "") for e in top]
-                fig = go.Figure(data=[go.Bar(
-                    x=[e["conversions"] for e in top],
-                    y=labels,
-                    orientation="h",
-                    marker_color="#F58518",
-                )])
+    # ══════════════════════════════════════════════════════
+    # TAB 3 — GOOGLE ANALYTICS
+    # ══════════════════════════════════════════════════════
+    with tab3:
+        st.markdown(_header_html(logo_b64, logo_mime, client_name, period_label), unsafe_allow_html=True)
+        _section_title("Źródła ruchu na stronie")
+
+        if ga4_data:
+            g = ga4_data["general"]
+            dur = g["avg_session_duration_sec"]
+            cols = st.columns(4)
+            cols[0].markdown(_kpi_card("Użytkownicy", f"{g['users']:,}"), unsafe_allow_html=True)
+            cols[1].markdown(_kpi_card("Sesje", f"{g['sessions']:,}"), unsafe_allow_html=True)
+            cols[2].markdown(_kpi_card("Śr. czas wizyty", f"{dur//60}m {dur%60}s"), unsafe_allow_html=True)
+            cols[3].markdown(_kpi_card("Wsp. zaangażowania", f"{100 - g['bounce_rate_pct']:.1f}%"), unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            sources = ga4_data.get("sources", [])
+            col_l, col_r = st.columns([1, 1])
+
+            with col_l:
+                if sources:
+                    fig = go.Figure(go.Pie(
+                        labels=[s["channel"] for s in sources],
+                        values=[s["sessions"] for s in sources],
+                        hole=0.45,
+                        textinfo="label+percent",
+                        marker=dict(colors=[
+                            ACCENT, ACCENT2, "#F0A868", "#2E6EA6", "#A8D8EA",
+                            "#E8A0BF", "#B5EAD7", "#FFDAC1",
+                        ]),
+                        textfont=dict(size=11),
+                    ))
+                    fig.update_layout(
+                        showlegend=False,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        height=320,
+                        paper_bgcolor="rgba(0,0,0,0)",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with col_r:
+                if sources:
+                    top_src = sorted(sources, key=lambda x: x["sessions"], reverse=True)[:8]
+                    fig = go.Figure(go.Bar(
+                        x=[s["sessions"] for s in top_src],
+                        y=[s["channel"] for s in top_src],
+                        orientation="h",
+                        marker_color=ACCENT2,
+                        text=[str(s["sessions"]) for s in top_src],
+                        textposition="outside",
+                    ))
+                    fig.update_layout(
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        margin=dict(t=10, b=10, l=10, r=40),
+                        height=320,
+                        xaxis=dict(showgrid=False, visible=False),
+                        yaxis=dict(autorange="reversed"),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # Tabela źródeł
+            if sources:
+                _plotly_table(
+                    ["Źródło / medium", "Sesje", "Użytkownicy"],
+                    [[s["channel"], f"{s['sessions']:,}", f"{s['users']:,}"] for s in sources],
+                )
+
+            # Konwersje GA4
+            events = ga4_data.get("conversion_events", [])
+            if events:
+                st.markdown("<br>", unsafe_allow_html=True)
+                _section_title("Konwersje na stronie")
+                top_ev = events[:10]
+                ev_labels = [
+                    e["event"]
+                    .replace("restauracja_biala_dama_(web)_", "")
+                    .replace("restauracja_biala_dama (web) ", "")
+                    .replace("_", " ")
+                    for e in top_ev
+                ]
+                fig = go.Figure(go.Bar(
+                    x=ev_labels,
+                    y=[e["conversions"] for e in top_ev],
+                    marker=dict(
+                        color=[e["conversions"] for e in top_ev],
+                        colorscale=[[0, "#FFF8F3"], [1, ACCENT]],
+                        showscale=False,
+                        line=dict(width=0),
+                    ),
+                    text=[str(int(e["conversions"])) for e in top_ev],
+                    textposition="outside",
+                ))
                 fig.update_layout(
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
-                    margin=dict(t=10, b=10, l=10, r=10),
-                    height=280,
-                    xaxis=dict(title="Liczba"),
+                    margin=dict(t=10, b=60, l=10, r=10),
+                    height=320,
+                    xaxis=dict(tickangle=-25),
+                    yaxis=dict(showgrid=False, visible=False),
                 )
                 st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Brak danych GA4 za ten okres.")
+        else:
+            st.info("Brak danych Google Analytics 4 za ten okres.")
 
-    st.markdown("---")
+    # ══════════════════════════════════════════════════════
+    # TAB 4 — PODSUMOWANIE
+    # ══════════════════════════════════════════════════════
+    with tab4:
+        st.markdown(_header_html(logo_b64, logo_mime, client_name, period_label), unsafe_allow_html=True)
+        _section_title(f"Podsumowanie działań marketingowych – {period_label}")
 
-    # ── Analiza tekstowa ──────────────────────────────────────────────────────
-    st.markdown("## 3. Analiza i rekomendacje")
-    st.markdown(report_text)
+        # Wyciągnij sekcje z wygenerowanego tekstu
+        import re
+        sections = re.split(r"#{1,3}\s+", report_text)
+        # Pokaż cały tekst raportu z wyjątkiem sekcji "Plan na kolejny miesiąc"
+        clean = re.sub(r"#{1,3}\s+4\. Plan na kolejny miesiąc.*", "", report_text, flags=re.DOTALL)
+        st.markdown(clean)
+
+        # Gauges podsumowujące
+        if ads_data:
+            t = ads_data["totals"]
+            conv_rate = round(t["conversions"] / t["clicks"] * 100, 1) if t["clicks"] else 0
+            st.markdown("<br>", unsafe_allow_html=True)
+            _section_title("Kluczowe wskaźniki miesiąca")
+            c1, c2, c3 = st.columns(3)
+            for col, val, maxv, label in [
+                (c1, t["cost_per_conversion_pln"], 20, "Koszt konwersji (zł)"),
+                (c2, conv_rate, 50, "Wsp. konwersji (%)"),
+                (c3, t["ctr_pct"], 20, "CTR (%)"),
+            ]:
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number",
+                    value=val,
+                    title={"text": label, "font": {"size": 13}},
+                    gauge={
+                        "axis": {"range": [0, maxv]},
+                        "bar": {"color": ACCENT},
+                        "bgcolor": GRAY,
+                        "borderwidth": 0,
+                        "steps": [{"range": [0, maxv * 0.5], "color": "#FFF8F3"}],
+                    },
+                    number={"font": {"color": ACCENT2}},
+                ))
+                fig.update_layout(height=200, margin=dict(t=30, b=10, l=20, r=20),
+                                  paper_bgcolor="rgba(0,0,0,0)")
+                col.plotly_chart(fig, use_container_width=True)
+
+    # ══════════════════════════════════════════════════════
+    # TAB 5 — WNIOSKI I REKOMENDACJE
+    # ══════════════════════════════════════════════════════
+    with tab5:
+        st.markdown(_header_html(logo_b64, logo_mime, client_name, period_label), unsafe_allow_html=True)
+        _section_title("Wnioski i rekomendacje")
+
+        # Wyciągnij sekcję planu z raportu
+        import re
+        match = re.search(r"#{1,3}\s+4\. Plan na kolejny miesiąc(.*)", report_text, re.DOTALL)
+        if match:
+            st.markdown(match.group(1).strip())
+        else:
+            st.markdown(report_text)
+
+        # Podsumowanie wydatków — sparkline
+        if ads_data:
+            campaigns = ads_data.get("campaigns", [])
+            if campaigns:
+                st.markdown("<br>", unsafe_allow_html=True)
+                _section_title("Budżet per kampania")
+                names = [c["name"].replace("_", " ") for c in campaigns]
+                costs = [c["cost_pln"] for c in campaigns]
+                colors = [ACCENT if i == 0 else ACCENT2 for i in range(len(campaigns))]
+                fig = go.Figure(go.Bar(
+                    x=names, y=costs,
+                    marker_color=colors,
+                    text=[f"{v} zł" for v in costs],
+                    textposition="outside",
+                ))
+                fig.update_layout(
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    margin=dict(t=10, b=20, l=10, r=10),
+                    height=300,
+                    xaxis=dict(tickangle=-20),
+                    yaxis=dict(showgrid=False, visible=False),
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 
 # ─── Strona: Generuj raport ───────────────────────────────────────────────────
