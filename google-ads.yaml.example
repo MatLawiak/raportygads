@@ -1,0 +1,10 @@
+# Skopiuj ten plik jako google-ads.yaml i uzupełnij danymi
+# NIE commituj google-ads.yaml do repozytorium!
+
+developer_token: TWÓJ_DEVELOPER_TOKEN
+client_id: TWÓJ_CLIENT_ID
+client_secret: TWÓJ_CLIENT_SECRET
+refresh_token: TWÓJ_REFRESH_TOKEN
+
+# Opcjonalne — jeśli używasz konta menadżera (MCC):
+# login_customer_id: TWÓJ_MCC_ID

@@ -1,0 +1,15 @@
+# Dane uwierzytelniające — NIGDY nie commituj tych plików!
+google-ads.yaml
+*.json
+.env
+service-account*.json
+
+# Wygenerowane raporty
+raporty/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
