@@ -674,6 +674,77 @@ def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga
                 st.plotly_chart(fig, use_container_width=True)
 
 
+# ─── HTML export ─────────────────────────────────────────────────────────────
+
+def _report_to_html(client_name: str, period_label: str, report_text: str) -> str:
+    try:
+        import markdown as _md
+        body_html = _md.markdown(report_text, extensions=["tables", "fenced_code"])
+    except ImportError:
+        import html
+        body_html = "<pre>" + html.escape(report_text) + "</pre>"
+
+    return f"""<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raport — {client_name} — {period_label}</title>
+<style>
+  body {{
+    font-family: Arial, Helvetica, sans-serif;
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #333;
+    line-height: 1.65;
+  }}
+  h1, h2, h3 {{ color: #1A3A5C; }}
+  h2 {{
+    border-bottom: 3px solid #E8630A;
+    padding-bottom: 6px;
+    margin-top: 36px;
+  }}
+  table {{
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    font-size: 0.9rem;
+  }}
+  th {{
+    background: #1A3A5C;
+    color: white;
+    padding: 10px 14px;
+    text-align: left;
+  }}
+  td {{ padding: 8px 14px; border-bottom: 1px solid #eee; }}
+  tr:nth-child(even) td {{ background: #F5F5F5; }}
+  .report-header {{
+    background: linear-gradient(135deg, #1A3A5C 0%, #E8630A 100%);
+    color: white;
+    padding: 36px 32px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 32px;
+  }}
+  .report-header h1 {{ color: white; margin: 0; font-size: 2rem; }}
+  .report-header p {{ color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 1.1rem; }}
+  @media print {{
+    body {{ margin: 20px; }}
+    .report-header {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+  }}
+</style>
+</head>
+<body>
+<div class="report-header">
+  <h1>{client_name}</h1>
+  <p>Raport marketingowy &nbsp;|&nbsp; {period_label}</p>
+</div>
+{body_html}
+</body>
+</html>"""
+
+
 # ─── Strona: Generuj raport ───────────────────────────────────────────────────
 
 def page_generate():
@@ -708,7 +779,7 @@ def page_generate():
 
     if st.button("▶ Generuj raport", type="primary", use_container_width=True):
         if not os.environ.get("OPENAI_API_KEY"):
-            st.error("Brak klucza OPENAI_API_KEY. Ustaw zmienną środowiskową i uruchom aplikację ponownie.")
+            st.error("Brak klucza OpenAI. Przejdź do **Ustawienia** i dodaj swój klucz API OpenAI.")
         else:
             with st.spinner("Pobieranie danych z Google Ads i GA4..."):
                 try:
@@ -729,13 +800,27 @@ def page_generate():
     if st.session_state.report_text:
         st.markdown("---")
 
-        dl_col, email_col, _ = st.columns([1, 1, 2])
+        dl_col, dl_html_col, email_col = st.columns([1, 1, 1])
         with dl_col:
             st.download_button(
                 label="⬇ Pobierz (.md)",
                 data=st.session_state.report_text.encode("utf-8"),
                 file_name=st.session_state.report_filename,
                 mime="text/markdown",
+                use_container_width=True,
+            )
+        with dl_html_col:
+            html_content = _report_to_html(
+                st.session_state.report_client,
+                st.session_state.report_period,
+                st.session_state.report_text,
+            )
+            st.download_button(
+                label="⬇ Pobierz (.html)",
+                data=html_content.encode("utf-8"),
+                file_name=st.session_state.report_filename.replace(".md", ".html"),
+                mime="text/html",
+                use_container_width=True,
             )
         with email_col:
             recipients = cfg["email"].get("recipients", [])
@@ -893,6 +978,91 @@ def page_settings():
     st.markdown('<p class="main-title">Ustawienia</p>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Konfiguracja połączeń z API i wysyłki email.</p>', unsafe_allow_html=True)
 
+    # ── OpenAI API Key ────────────────────────────────────────────────────────
+    st.subheader("OpenAI — klucz API")
+    st.caption(
+        "Klucz API jest wymagany do generowania treści raportów. "
+        "Pobierz go na platform.openai.com → API keys."
+    )
+
+    current_openai = os.environ.get("OPENAI_API_KEY", "")
+    with st.form("openai_key_form"):
+        openai_input = st.text_input(
+            "Klucz API OpenAI",
+            value=current_openai,
+            type="password",
+            placeholder="sk-proj-...",
+        )
+        if st.form_submit_button("Zapisz klucz OpenAI", type="primary"):
+            val = openai_input.strip()
+            if val.startswith("sk-"):
+                update_env_key("OPENAI_API_KEY", val)
+                st.success("Klucz OpenAI zapisany.")
+                st.rerun()
+            elif val == "":
+                st.error("Wpisz klucz API.")
+            else:
+                st.error("Klucz powinien zaczynać się od 'sk-'.")
+
+    # ── Google Ads ────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Google Ads — konfiguracja")
+    st.caption("Wgraj gotowy plik google-ads.yaml lub wypełnij dane ręcznie.")
+
+    gads_yaml_path = BASE_DIR / "google-ads.yaml"
+    if gads_yaml_path.exists():
+        st.success("Plik google-ads.yaml jest wgrany.")
+        if st.button("Usuń konfigurację Google Ads"):
+            gads_yaml_path.unlink()
+            st.success("Plik usunięty.")
+            st.rerun()
+    else:
+        st.info("Brak pliku google-ads.yaml.")
+
+    uploaded_yaml = st.file_uploader(
+        "Wgraj plik google-ads.yaml",
+        type=["yaml", "yml"],
+        help="Plik pobierasz z panelu Google Ads lub generujesz przez google-ads-python.",
+    )
+    if uploaded_yaml is not None:
+        gads_yaml_path.write_bytes(uploaded_yaml.read())
+        st.success("Plik google-ads.yaml zapisany.")
+        st.rerun()
+
+    with st.expander("Lub wpisz dane konfiguracyjne ręcznie"):
+        st.caption(
+            "Developer token znajdziesz w Google Ads → Narzędzia → Centrum API. "
+            "Client ID / Secret / Refresh token — z Google Cloud Console (OAuth 2.0). "
+            "Login Customer ID — to Twój MCC (ID bez myślników)."
+        )
+        with st.form("gads_manual_form"):
+            dev_token = st.text_input("Developer Token", placeholder="AbCdEfGhIjKlMnOpQrSt")
+            c1, c2 = st.columns(2)
+            with c1:
+                client_id = st.text_input("Client ID", placeholder="123456789-abc...apps.googleusercontent.com")
+                refresh_token = st.text_input("Refresh Token", type="password", placeholder="1//0g...")
+            with c2:
+                client_secret = st.text_input("Client Secret", type="password", placeholder="GOCSPX-...")
+                login_cid = st.text_input("Login Customer ID (MCC)", placeholder="8612470472")
+
+            if st.form_submit_button("Zapisz konfigurację Google Ads", type="primary"):
+                if all([dev_token.strip(), client_id.strip(), client_secret.strip(),
+                        refresh_token.strip(), login_cid.strip()]):
+                    yaml_content = (
+                        f"developer_token: {dev_token.strip()}\n"
+                        f"use_proto_plus: True\n"
+                        f"client_id: {client_id.strip()}\n"
+                        f"client_secret: {client_secret.strip()}\n"
+                        f"refresh_token: {refresh_token.strip()}\n"
+                        f"login_customer_id: {login_cid.strip().replace('-', '')}\n"
+                    )
+                    gads_yaml_path.write_text(yaml_content, encoding="utf-8")
+                    st.success("Konfiguracja Google Ads zapisana.")
+                    st.rerun()
+                else:
+                    st.error("Wypełnij wszystkie pola.")
+
+    st.markdown("---")
     # ── GA4 Service Account ───────────────────────────────────────────────────
     st.subheader("Google Analytics 4 — credentials")
 
@@ -1063,21 +1233,21 @@ def page_settings():
             st.caption("Klucz ustawiony — generowanie raportów działa.")
         else:
             st.error("OpenAI API Key — brak")
-            st.caption("Ustaw zmienną środowiskową `OPENAI_API_KEY` przed uruchomieniem aplikacji.")
+            st.caption("Uzupełnij klucz w sekcji OpenAI powyżej.")
     with col2:
         if gads_yaml:
             st.success("google-ads.yaml")
             st.caption("Plik konfiguracyjny Google Ads znaleziony.")
         else:
             st.error("google-ads.yaml — brak")
-            st.caption("Utwórz plik `google-ads.yaml` w folderze projektu.")
+            st.caption("Wgraj plik lub wypełnij formularz w sekcji Google Ads powyżej.")
     with col3:
         if ga4_creds:
             st.success("GA4 Service Account")
             st.caption(f"Credentials: `{Path(ga4_creds).name}`")
         else:
             st.warning("GA4 Service Account — brak")
-            st.caption("Ustaw `GOOGLE_APPLICATION_CREDENTIALS` aby pobierać dane z GA4.")
+            st.caption("Wgraj plik JSON w sekcji Google Analytics 4 powyżej.")
 
 
 # ─── Router ───────────────────────────────────────────────────────────────────
