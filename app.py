@@ -141,7 +141,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "Nawigacja",
-        ["Generuj raport", "Klienci", "Ustawienia"],
+        ["Generuj raport", "Klienci", "Ustawienia", "Pomoc / FAQ"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -1250,6 +1250,211 @@ def page_settings():
             st.caption("Wgraj plik JSON w sekcji Google Analytics 4 powyżej.")
 
 
+# ─── Strona: Pomoc / FAQ ──────────────────────────────────────────────────────
+
+def page_faq():
+    st.markdown('<p class="main-title">Pomoc / FAQ</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p class="page-subtitle">Instrukcje krok po kroku — jak znaleźć każdy klucz i skonfigurować aplikację.</p>',
+        unsafe_allow_html=True,
+    )
+
+    # ── OpenAI API Key ────────────────────────────────────────────────────────
+    with st.expander("Klucz API OpenAI — jak go zdobyć?", expanded=False):
+        st.markdown("""
+**Do czego służy:** OpenAI generuje treść raportu (analizę, wnioski, rekomendacje).
+
+**Krok po kroku:**
+
+1. Wejdź na stronę **platform.openai.com** i zaloguj się (lub załóż konto).
+2. W lewym menu kliknij **API keys**.
+3. Kliknij przycisk **Create new secret key** — nadaj mu dowolną nazwę np. *Raporty Marketingowe*.
+4. Skopiuj wygenerowany klucz — zaczyna się od `sk-proj-...`
+   > Uwaga: klucz jest widoczny tylko raz. Jeśli go zamkniesz bez skopiowania, musisz wygenerować nowy.
+5. Wklej klucz w **Ustawienia → OpenAI API Key** i kliknij *Zapisz*.
+
+**Koszt:** Generowanie jednego raportu miesięcznego to ok. 0,01–0,05 USD (model gpt-4o-mini jest bardzo tani).
+        """)
+
+    # ── Google Ads ────────────────────────────────────────────────────────────
+    with st.expander("Google Ads — credentials (Developer Token, Client ID, Refresh Token...)", expanded=False):
+        st.markdown("""
+**Do czego służy:** Aplikacja łączy się z Twoim kontem Google Ads, żeby pobrać dane o kampaniach.
+
+Potrzebujesz 5 wartości. Poniżej wyjaśnienie gdzie każdą znaleźć.
+
+---
+
+**1. Login Customer ID (MCC)**
+
+To numer Twojego konta menedżerskiego (MCC) w Google Ads.
+
+- Zaloguj się na **ads.google.com**
+- W prawym górnym rogu zobaczysz numer w formacie `XXX-XXX-XXXX`
+- Przepisz go bez myślników, np. `8612470472`
+
+---
+
+**2. Developer Token**
+
+- W panelu Google Ads kliknij ikonę klucza (Narzędzia i ustawienia) → **Centrum API**
+- Skopiuj wartość pola *Developer token*
+- Jeśli jeszcze nie masz tokenu — złóż wniosek (standardowy token wystarczy do pobierania danych)
+
+---
+
+**3. Client ID i Client Secret**
+
+To dane aplikacji OAuth w Google Cloud Console.
+
+1. Wejdź na **console.cloud.google.com**
+2. Wybierz projekt (lub utwórz nowy)
+3. Menu boczne → **APIs & Services → Credentials**
+4. Kliknij **Create Credentials → OAuth 2.0 Client IDs**
+5. Typ aplikacji: *Desktop app* — nadaj nazwę i zapisz
+6. Skopiuj **Client ID** (kończy się na `.apps.googleusercontent.com`) i **Client Secret**
+
+> Upewnij się, że w projekcie włączyłeś Google Ads API: APIs & Services → Library → wyszukaj *Google Ads API* → Enable.
+
+---
+
+**4. Refresh Token**
+
+Refresh token uzyskujesz przez jednorazową autoryzację OAuth.
+
+W folderze projektu znajduje się skrypt `get_token.py`:
+```
+python get_token.py
+```
+Skrypt otworzy przeglądarkę, poprosisz o zgodę na dostęp do konta Google Ads, a następnie wypisze `refresh_token` w terminalu.
+
+> Potrzebujesz do tego uzupełnionych pól Client ID i Client Secret powyżej.
+
+---
+
+Po zebraniu wszystkich 5 wartości wklej je w **Ustawienia → Google Ads → formularz ręczny**.
+        """)
+
+    # ── GA4 Service Account ───────────────────────────────────────────────────
+    with st.expander("Google Analytics 4 — credentials (plik JSON)", expanded=False):
+        st.markdown("""
+**Do czego służy:** Aplikacja pobiera dane o ruchu na stronie (użytkownicy, sesje, źródła, konwersje).
+
+Wymaga pliku JSON z kluczem konta usługi (Service Account) w Google Cloud Console.
+
+---
+
+**Krok 1 — Utwórz konto usługi (Service Account)**
+
+1. Wejdź na **console.cloud.google.com**
+2. Menu boczne → **IAM i administracja → Konta usługi**
+3. Kliknij **Utwórz konto usługi**
+4. Nadaj nazwę np. *raporty-ga4* i kliknij *Utwórz i kontynuuj*
+5. Rolę możesz pominąć — kliknij *Gotowe*
+
+---
+
+**Krok 2 — Pobierz klucz JSON**
+
+1. Kliknij na utworzone konto usługi
+2. Zakładka **Klucze → Dodaj klucz → Utwórz nowy klucz**
+3. Wybierz format **JSON** → kliknij *Utwórz*
+4. Plik JSON zostanie pobrany na Twój komputer
+
+---
+
+**Krok 3 — Dodaj konto usługi do GA4**
+
+To ważny krok — bez niego aplikacja nie będzie mieć dostępu do danych.
+
+1. Wejdź do **Google Analytics (analytics.google.com)**
+2. Kliknij **Ustawienia (ikona koła zębatego)** → sekcja *Usługa* → **Zarządzanie dostępem do usługi**
+3. Kliknij **+** (Dodaj użytkownika)
+4. Wklej adres email konta usługi — wygląda tak: `nazwa@nazwa-projektu.iam.gserviceaccount.com`
+   *(znajdziesz go w pliku JSON pod kluczem `client_email`)*
+5. Rola: **Czytelnik** — kliknij *Dodaj*
+
+---
+
+**Krok 4 — Wgraj plik do aplikacji**
+
+Przejdź do **Ustawienia → Google Analytics 4** i wgraj pobrany plik JSON.
+
+---
+
+**Gdzie znaleźć GA4 Property ID?**
+
+- W Google Analytics: **Ustawienia → Informacje o usłudze → Identyfikator usługi**
+- To liczba, np. `123456789`
+- Wpisz ją w zakładce **Klienci** przy danym kliencie
+        """)
+
+    # ── SMTP Email ───────────────────────────────────────────────────────────
+    with st.expander("Wysyłka email (SMTP) — konfiguracja dla Gmail", expanded=False):
+        st.markdown("""
+**Do czego służy:** Po wygenerowaniu raportu możesz wysłać go emailem do klienta.
+
+Najłatwiej skonfigurować przez konto Gmail z *hasłem do aplikacji*.
+
+---
+
+**Krok 1 — Włącz weryfikację dwuetapową**
+
+Hasła do aplikacji działają tylko gdy masz aktywną weryfikację dwuetapową.
+
+1. Wejdź na **myaccount.google.com → Bezpieczeństwo**
+2. Znajdź sekcję *Jak logujesz się w Google*
+3. Kliknij **Weryfikacja dwuetapowa** i włącz ją (jeśli jeszcze nie jest)
+
+---
+
+**Krok 2 — Wygeneruj hasło do aplikacji**
+
+1. Na tej samej stronie Bezpieczeństwo wpisz w wyszukiwarce **"hasła do aplikacji"** lub przejdź do:
+   `myaccount.google.com/apppasswords`
+2. Kliknij **Wybierz aplikację → Inna (niestandardowa nazwa)**
+3. Wpisz np. *Raporty Marketingowe* → kliknij *Generuj*
+4. Zobaczysz hasło w formacie: `xxxx xxxx xxxx xxxx` (16 znaków)
+5. Skopiuj je — jest widoczne tylko raz
+
+---
+
+**Krok 3 — Wpisz dane w Ustawieniach**
+
+Przejdź do **Ustawienia → Konfiguracja wysyłki email (SMTP)** i uzupełnij:
+
+| Pole | Wartość |
+|---|---|
+| Serwer SMTP | `smtp.gmail.com` |
+| Port | `587` |
+| Email nadawcy | Twój adres Gmail, np. `twoj@gmail.com` |
+| Hasło aplikacji | Wklej skopiowane hasło (16 znaków) |
+
+Kliknij **Zapisz**, a następnie **Testuj połączenie SMTP** aby sprawdzić czy działa.
+
+---
+
+**Krok 4 — Dodaj odbiorców**
+
+W sekcji **Odbiorcy raportów** wpisz adresy email, na które mają trafiać raporty.
+Możesz dodać kilka adresów — raport zostanie wysłany do każdego z nich.
+        """)
+
+    # ── Najczęstsze problemy ──────────────────────────────────────────────────
+    with st.expander("Najczęstsze problemy i rozwiązania", expanded=False):
+        st.markdown("""
+| Problem | Przyczyna | Rozwiązanie |
+|---|---|---|
+| *Brak klucza OpenAI* | Klucz nie jest wpisany | Ustawienia → OpenAI API Key |
+| *Google Ads: brak danych* | Podałeś ID konta klienta zamiast MCC | Upewnij się, że Login Customer ID to numer MCC (konto menedżerskie) |
+| *GA4: błąd 403 (brak dostępu)* | Service account nie ma uprawnień do GA4 | Dodaj email konta usługi jako Czytelnik w GA4 (krok 3 instrukcji powyżej) |
+| *GA4: brak danych* | Zły Property ID | Sprawdź ID w GA4: Ustawienia → Informacje o usłudze |
+| *Email: błąd logowania* | Zwykłe hasło Gmail zamiast hasła do aplikacji | Wygeneruj *hasło do aplikacji* (16 znaków) — patrz instrukcja SMTP |
+| *Raport się nie generuje* | Brak klucza OpenAI lub brak połączenia | Sprawdź Status API w Ustawieniach |
+| *"Your app is in the oven"* | Streamlit Cloud przebudowuje aplikację | Odczekaj 1–2 minuty i odśwież stronę |
+        """)
+
+
 # ─── Router ───────────────────────────────────────────────────────────────────
 
 if page == "Generuj raport":
@@ -1258,3 +1463,5 @@ elif page == "Klienci":
     page_clients()
 elif page == "Ustawienia":
     page_settings()
+elif page == "Pomoc / FAQ":
+    page_faq()
