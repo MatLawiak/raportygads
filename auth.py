@@ -32,7 +32,10 @@ def _conn():
     """Zwraca (connection, placeholder) dla aktywnego silnika."""
     if _is_postgres():
         import psycopg2
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        url = os.environ["DATABASE_URL"]
+        if "sslmode" not in url:
+            url += "?sslmode=require"
+        conn = psycopg2.connect(url)
         try:
             yield conn, "%s"
             conn.commit()
