@@ -1057,6 +1057,145 @@ def _report_to_html(
 </html>"""
 
 
+# ─── Edytor wniosków i rekomendacji ──────────────────────────────────────────
+
+EDITABLE_SECTIONS = [
+    ("Wnioski i rekomendacje", "wnioski"),
+    ("Plan na kolejny miesiąc", "plan"),
+]
+
+
+def _parse_section_points(report_text: str, section_title: str) -> list[str]:
+    """Wyciąga punkty listy (numerowanej lub bullet) z konkretnej sekcji raportu."""
+    import re
+    pattern = rf"##\s+\d+\.\s+{re.escape(section_title)}\s*\n(.*?)(?=\n##\s+\d+\.|\n---|\Z)"
+    match = re.search(pattern, report_text, re.DOTALL)
+    if not match:
+        return []
+
+    body = match.group(1).strip()
+    points: list[str] = []
+    current: list[str] = []
+    list_marker = re.compile(r"^\s*(?:\d+\.|\-|\*)\s+")
+
+    for line in body.split("\n"):
+        if list_marker.match(line):
+            if current:
+                points.append("\n".join(current).strip())
+            current = [list_marker.sub("", line, count=1)]
+        elif current:
+            current.append(line.strip())
+    if current:
+        points.append("\n".join(current).strip())
+
+    return [p for p in points if p.strip()]
+
+
+def _replace_section_points(report_text: str, section_title: str, points: list[str]) -> str:
+    """Wstawia nowe punkty (numerowane) w miejsce starej zawartości sekcji."""
+    import re
+    if not points:
+        new_body = "_Brak wpisów._"
+    else:
+        new_body = "\n\n".join(f"{i+1}. {p.strip()}" for i, p in enumerate(points))
+
+    pattern = rf"(##\s+\d+\.\s+{re.escape(section_title)}\s*\n)(.*?)(?=\n##\s+\d+\.|\n---|\Z)"
+    replacement = lambda m: m.group(1) + "\n" + new_body + "\n"
+    return re.sub(pattern, replacement, report_text, flags=re.DOTALL)
+
+
+def _init_editor_state(report_text: str) -> None:
+    """Inicjalizuje listę punktów per sekcja, jeśli jeszcze nie jest w session_state."""
+    for title, slug in EDITABLE_SECTIONS:
+        state_key = f"edit_points_{slug}"
+        if state_key not in st.session_state:
+            parsed = _parse_section_points(report_text, title)
+            st.session_state[state_key] = [
+                {"id": str(uuid.uuid4()), "text": p} for p in parsed
+            ]
+
+
+def _reset_editor_state() -> None:
+    for _, slug in EDITABLE_SECTIONS:
+        st.session_state.pop(f"edit_points_{slug}", None)
+
+
+def render_recommendations_editor(report_text: str) -> None:
+    st.markdown("---")
+    with st.expander("Edytuj wnioski i plan na kolejny miesiąc", expanded=False):
+        st.caption(
+            "Możesz poprawiać treść każdego punktu, usuwać niepotrzebne lub dodać nowe. "
+            "Po kliknięciu **Zastosuj zmiany** raporty (.md, .html) i wizualizacja zostaną zaktualizowane."
+        )
+
+        _init_editor_state(report_text)
+
+        for title, slug in EDITABLE_SECTIONS:
+            state_key = f"edit_points_{slug}"
+            points = st.session_state[state_key]
+
+            st.markdown(f"#### {title}")
+
+            if not points:
+                st.info("Brak punktów. Możesz dodać nowy poniżej.")
+
+            for idx, point in enumerate(points):
+                cols = st.columns([18, 1])
+                with cols[0]:
+                    new_value = st.text_area(
+                        f"Punkt {idx + 1}",
+                        value=point["text"],
+                        key=f"{slug}_text_{point['id']}",
+                        label_visibility="collapsed",
+                        height=80,
+                    )
+                    point["text"] = new_value
+                with cols[1]:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("✕", key=f"{slug}_del_{point['id']}", help="Usuń punkt"):
+                        st.session_state[state_key] = [
+                            p for p in points if p["id"] != point["id"]
+                        ]
+                        st.rerun()
+
+            with st.form(f"add_{slug}_form", clear_on_submit=True):
+                new_text = st.text_area(
+                    "Dodaj nowy punkt",
+                    key=f"{slug}_new_text",
+                    placeholder="Wpisz treść nowego punktu...",
+                    height=80,
+                )
+                if st.form_submit_button(f"+ Dodaj do '{title}'"):
+                    if new_text.strip():
+                        st.session_state[state_key].append(
+                            {"id": str(uuid.uuid4()), "text": new_text.strip()}
+                        )
+                        st.rerun()
+
+            st.markdown("---")
+
+        col_apply, col_reset = st.columns([2, 1])
+        with col_apply:
+            if st.button("Zastosuj zmiany do raportu", type="primary", use_container_width=True):
+                new_report = report_text
+                for title, slug in EDITABLE_SECTIONS:
+                    points = [
+                        p["text"].strip()
+                        for p in st.session_state[f"edit_points_{slug}"]
+                        if p["text"].strip()
+                    ]
+                    new_report = _replace_section_points(new_report, title, points)
+                st.session_state.report_text = new_report
+                _reset_editor_state()
+                st.success("Zmiany zostały zastosowane. Przewiń wyżej aby pobrać zaktualizowany raport.")
+                st.rerun()
+        with col_reset:
+            if st.button("Przywróć z raportu", use_container_width=True,
+                         help="Anuluje niezatwierdzone zmiany i wczyta punkty z aktualnego raportu."):
+                _reset_editor_state()
+                st.rerun()
+
+
 # ─── Strona: Generuj raport ───────────────────────────────────────────────────
 
 def page_generate():
@@ -1128,6 +1267,7 @@ def page_generate():
                     st.session_state.report_ads_data = ads_data
                     st.session_state.report_ga4_data = ga4_data
                     st.session_state.report_period = period_label
+                    _reset_editor_state()
                     st.success(f"Raport wygenerowany i zapisany jako `{filename}`")
                 except Exception as e:
                     st.error(f"Błąd generowania raportu: {e}")
@@ -1191,6 +1331,8 @@ def page_generate():
             st.session_state.get("report_ga4_data", {}),
             st.session_state.report_text,
         )
+
+        render_recommendations_editor(st.session_state.report_text)
 
 
 # ─── Strona: Klienci ──────────────────────────────────────────────────────────
