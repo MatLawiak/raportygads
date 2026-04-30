@@ -517,9 +517,10 @@ def render_visual_report(
             t = ads_data["totals"]
             g = ga4_data["general"]
             dur = g["avg_session_duration_sec"]
+            ga4_conv = sum(int(e.get("conversions", 0)) for e in ga4_data.get("conversion_events", []))
             cols = st.columns(4)
             cols[0].markdown(_kpi_card("Wydatki Google Ads", f"{t['cost_pln']} zł"), unsafe_allow_html=True)
-            cols[1].markdown(_kpi_card("Konwersje", f"{int(t['conversions'])}"), unsafe_allow_html=True)
+            cols[1].markdown(_kpi_card("Konwersje GA4", f"{ga4_conv}"), unsafe_allow_html=True)
             cols[2].markdown(_kpi_card("Użytkownicy strony", f"{g['users']:,}"), unsafe_allow_html=True)
             cols[3].markdown(_kpi_card("Śr. czas wizyty", f"{dur//60}m {dur%60}s"), unsafe_allow_html=True)
 
@@ -539,111 +540,69 @@ def render_visual_report(
 
         if ads_data:
             t = ads_data["totals"]
-            conv_rate = round(t["conversions"] / t["clicks"] * 100, 2) if t["clicks"] else 0
+            avg_cpc = round(t["cost_pln"] / t["clicks"], 2) if t["clicks"] else 0
             cols = st.columns(4)
-            cols[0].markdown(_kpi_card("Kliknięcia", f"{t['clicks']:,}"), unsafe_allow_html=True)
-            cols[1].markdown(_kpi_card("Koszt konwersji", f"{t['cost_per_conversion_pln']} zł"), unsafe_allow_html=True)
-            cols[2].markdown(_kpi_card("Współcz. konwersji", f"{conv_rate}%"), unsafe_allow_html=True)
-            cols[3].markdown(_kpi_card("CTR", f"{t['ctr_pct']}%"), unsafe_allow_html=True)
+            cols[0].markdown(_kpi_card("Wyświetlenia", f"{t['impressions']:,}"), unsafe_allow_html=True)
+            cols[1].markdown(_kpi_card("Kliknięcia", f"{t['clicks']:,}"), unsafe_allow_html=True)
+            cols[2].markdown(_kpi_card("CTR", f"{t['ctr_pct']}%"), unsafe_allow_html=True)
+            cols[3].markdown(_kpi_card("Średni CPC", f"{avg_cpc} zł"), unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            col_l, col_r = st.columns([1, 1])
-
-            # Konwersje per typ — wykres poziomy
-            events = (ads_data.get("conversion_events") or [])
-            if not events:
-                # fallback jeśli brak per-event — pokaż sumę
-                events = []
-
-            # Wykres kampanii — koszt vs konwersje
             campaigns = ads_data.get("campaigns", [])
-            with col_l:
-                _section_title("Rodzaj konwersji")
-                if events:
-                    top_ev = events[:10]
-                    ev_labels = [
-                        e["event"]
-                        .replace("restauracja_biala_dama_(web)_", "")
-                        .replace("restauracja_biala_dama (web) ", "")
-                        .replace("_", " ")
-                        for e in top_ev
-                    ]
-                    fig = go.Figure(go.Bar(
-                        x=[e["conversions"] for e in top_ev],
-                        y=ev_labels,
-                        orientation="h",
-                        marker=dict(color=ACCENT, line=dict(width=0)),
-                        text=[str(int(e["conversions"])) for e in top_ev],
-                        textposition="outside",
-                    ))
-                    fig.update_layout(
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        margin=dict(t=10, b=10, l=10, r=40),
-                        height=300,
-                        xaxis=dict(showgrid=False, visible=False),
-                        yaxis=dict(autorange="reversed"),
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    total_conv = sum(e["conversions"] for e in events)
-                    st.markdown(f"**Suma całkowita: {int(total_conv)}**")
-                else:
-                    st.info("Brak danych konwersji per typ.")
 
-            with col_r:
-                _section_title("Efektywność kampanii")
-                if campaigns:
-                    names = [c["name"].replace("_", " ") for c in campaigns]
-                    fig = go.Figure(data=[
-                        go.Bar(
-                            name="Koszt (zł)",
-                            x=[c["cost_pln"] for c in campaigns],
-                            y=names,
-                            orientation="h",
-                            marker_color=ACCENT2,
-                            opacity=0.85,
-                        ),
-                        go.Bar(
-                            name="Konwersje",
-                            x=[c["conversions"] for c in campaigns],
-                            y=names,
-                            orientation="h",
-                            marker_color=ACCENT,
-                            opacity=0.85,
-                        ),
-                    ])
-                    fig.update_layout(
-                        barmode="group",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        legend=dict(orientation="h", y=1.1),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        height=300,
-                        xaxis=dict(showgrid=True, gridcolor="#eee"),
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+            # Wykres: koszt vs kliknięcia per kampania
+            _section_title("Efektywność kampanii — koszt vs kliknięcia")
+            if campaigns:
+                names = [c["name"].replace("_", " ") for c in campaigns]
+                fig = go.Figure(data=[
+                    go.Bar(
+                        name="Koszt (zł)",
+                        x=[c["cost_pln"] for c in campaigns],
+                        y=names,
+                        orientation="h",
+                        marker_color=ACCENT2,
+                        opacity=0.85,
+                    ),
+                    go.Bar(
+                        name="Kliknięcia",
+                        x=[c["clicks"] for c in campaigns],
+                        y=names,
+                        orientation="h",
+                        marker_color=ACCENT,
+                        opacity=0.85,
+                    ),
+                ])
+                fig.update_layout(
+                    barmode="group",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    legend=dict(orientation="h", y=1.15),
+                    margin=dict(t=10, b=10, l=10, r=10),
+                    height=320,
+                    xaxis=dict(showgrid=True, gridcolor="#eee"),
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
             # Tabela kampanii
             st.markdown("<br>", unsafe_allow_html=True)
             _section_title("Tabela kampanii")
             if campaigns:
                 rows = [
-                    [c["name"], f"{c['clicks']:,}", f"{c['impressions']:,}",
-                     f"{c['avg_cpc_pln']} zł", round(c["conversions"], 1),
-                     f"{c['cost_per_conversion_pln']} zł", f"{c['cost_pln']} zł"]
+                    [c["name"], f"{c['impressions']:,}", f"{c['clicks']:,}",
+                     f"{c['ctr_pct']}%", f"{c['avg_cpc_pln']} zł", f"{c['cost_pln']} zł"]
                     for c in campaigns
                 ]
                 rows.append([
                     "Suma całkowita",
-                    f"{t['clicks']:,}", f"{t['impressions']:,}",
-                    "—", round(t["conversions"], 1),
-                    f"{t['cost_per_conversion_pln']} zł", f"{t['cost_pln']} zł",
+                    f"{t['impressions']:,}", f"{t['clicks']:,}",
+                    f"{t['ctr_pct']}%", f"{avg_cpc} zł", f"{t['cost_pln']} zł",
                 ])
                 _plotly_table(
-                    ["Kampania", "Kliknięcia", "Wyświetlenia", "Śr. CPC", "Konwersje", "Koszt konw.", "Koszt"],
+                    ["Kampania", "Wyświetlenia", "Kliknięcia", "CTR", "Śr. CPC", "Koszt"],
                     rows,
                 )
+            st.caption("Konwersje są analizowane wyłącznie w GA4 — patrz zakładka Google Analytics.")
         else:
             st.info("Brak danych Google Ads za ten okres.")
 
@@ -772,16 +731,23 @@ def render_visual_report(
         st.markdown(clean)
 
         # Gauges podsumowujące
-        if ads_data:
-            t = ads_data["totals"]
-            conv_rate = round(t["conversions"] / t["clicks"] * 100, 1) if t["clicks"] else 0
+        if ads_data or ga4_data:
             st.markdown("<br>", unsafe_allow_html=True)
             _section_title("Kluczowe wskaźniki miesiąca")
             c1, c2, c3 = st.columns(3)
+
+            ctr_val = ads_data["totals"]["ctr_pct"] if ads_data else 0
+            cpc_val = (
+                round(ads_data["totals"]["cost_pln"] / ads_data["totals"]["clicks"], 2)
+                if ads_data and ads_data["totals"].get("clicks") else 0
+            )
+            engagement_val = (
+                round(100 - ga4_data["general"]["bounce_rate_pct"], 1) if ga4_data else 0
+            )
             for col, val, maxv, label in [
-                (c1, t["cost_per_conversion_pln"], 20, "Koszt konwersji (zł)"),
-                (c2, conv_rate, 50, "Wsp. konwersji (%)"),
-                (c3, t["ctr_pct"], 20, "CTR (%)"),
+                (c1, ctr_val, 20, "CTR (%)"),
+                (c2, cpc_val, max(cpc_val * 1.5, 5), "Średni CPC (zł)"),
+                (c3, engagement_val, 100, "Zaangażowanie GA4 (%)"),
             ]:
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number",
@@ -873,27 +839,30 @@ def _build_charts_html(ads_data: dict, ga4_data: dict) -> str:
     kpis = []
     if ads_data:
         t = ads_data["totals"]
-        conv_rate = round(t["conversions"] / t["clicks"] * 100, 1) if t["clicks"] else 0
+        avg_cpc = round(t["cost_pln"] / t["clicks"], 2) if t["clicks"] else 0
         kpis += [
             ("Wydatki Google Ads", f"{t['cost_pln']} zł"),
+            ("Wyświetlenia", f"{t['impressions']:,}"),
             ("Kliknięcia", f"{t['clicks']:,}"),
-            ("Konwersje", f"{int(t['conversions'])}"),
-            ("Wsp. konwersji", f"{conv_rate}%"),
+            ("CTR", f"{t['ctr_pct']}%"),
+            ("Średni CPC", f"{avg_cpc} zł"),
         ]
     if ga4_data:
         g = ga4_data["general"]
         dur = g["avg_session_duration_sec"]
+        ga4_conv = sum(int(e.get("conversions", 0)) for e in ga4_data.get("conversion_events", []))
         kpis += [
             ("Użytkownicy strony", f"{g['users']:,}"),
             ("Sesje", f"{g['sessions']:,}"),
             ("Śr. czas wizyty", f"{dur//60}m {dur%60}s"),
             ("Wsp. zaangażowania", f"{round(100 - g['bounce_rate_pct'], 1)}%"),
+            ("Konwersje GA4", f"{ga4_conv}"),
         ]
     if kpis:
         cards = "".join(_kpi_card_html(l, v) for l, v in kpis)
         sections.append(f'<div class="kpi-grid">{cards}</div>')
 
-    # ── Wykres: Wydatki vs konwersje per kampania ──────────────────────────
+    # ── Wykres: Koszt vs kliknięcia per kampania ───────────────────────────
     if ads_data:
         campaigns = ads_data.get("campaigns", [])
         if campaigns:
@@ -901,15 +870,15 @@ def _build_charts_html(ads_data: dict, ga4_data: dict) -> str:
             fig = go.Figure(data=[
                 go.Bar(name="Koszt (zł)", x=names, y=[c["cost_pln"] for c in campaigns],
                        marker_color="#1A3A5C"),
-                go.Bar(name="Konwersje", x=names, y=[c["conversions"] for c in campaigns],
+                go.Bar(name="Kliknięcia", x=names, y=[c["clicks"] for c in campaigns],
                        marker_color="#E8630A", yaxis="y2"),
             ])
             fig.update_layout(
-                title="Efektywność kampanii: koszt vs konwersje",
+                title="Efektywność kampanii: koszt vs kliknięcia",
                 barmode="group",
                 xaxis=dict(tickangle=-20),
                 yaxis=dict(title="Koszt (zł)"),
-                yaxis2=dict(title="Konwersje", overlaying="y", side="right"),
+                yaxis2=dict(title="Kliknięcia", overlaying="y", side="right"),
                 height=400, margin=dict(t=50, b=80, l=60, r=60),
                 **PLOT_LAYOUT,
             )

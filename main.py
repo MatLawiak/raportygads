@@ -298,14 +298,13 @@ def _format_campaigns_table(campaigns: list[dict]) -> str:
     if not campaigns:
         return "Brak aktywnych kampanii w tym okresie."
     lines = [
-        "| Kampania | Wyświetlenia | Kliknięcia | CTR% | Śr. CPC (zł) | Konwersje | Koszt/konw. (zł) | Wydatki (zł) |",
-        "|----------|-------------|------------|------|--------------|-----------|------------------|--------------|",
+        "| Kampania | Wyświetlenia | Kliknięcia | CTR% | Śr. CPC (zł) | Wydatki (zł) |",
+        "|----------|-------------|------------|------|--------------|--------------|",
     ]
     for c in campaigns:
         lines.append(
             f"| {c['name']} | {c['impressions']:,} | {c['clicks']:,} | "
-            f"{c['ctr_pct']} | {c['avg_cpc_pln']} | {c['conversions']} | "
-            f"{c['cost_per_conversion_pln']} | {c['cost_pln']} |"
+            f"{c['ctr_pct']} | {c['avg_cpc_pln']} | {c['cost_pln']} |"
         )
     return "\n".join(lines)
 
@@ -346,28 +345,24 @@ def build_report_prompt(
     if ads_data:
         t = ads_data["totals"]
         avg_cpc = round(t["cost_pln"] / t["clicks"], 2) if t["clicks"] else 0
-        conv_rate = round(t["conversions"] / t["clicks"] * 100, 2) if t["clicks"] else 0
         campaigns_table_md = _format_campaigns_table(ads_data.get("campaigns", []))
         ads_section = f"""Wyświetlenia: {t['impressions']:,}
 Kliknięcia: {t['clicks']:,}
 CTR: {t['ctr_pct']}%
 Średni CPC: {avg_cpc} zł
 Łączne wydatki: {t['cost_pln']} zł
-Konwersje: {t['conversions']}
-Koszt za konwersję: {t['cost_per_conversion_pln']} zł
-Współczynnik konwersji: {conv_rate}%
 
 Wyniki per kampania:
-{campaigns_table_md}"""
+{campaigns_table_md}
+
+UWAGA: NIE używaj danych konwersji z Google Ads — w tym koncie nie są one śledzone.
+Wszystkie konwersje pochodzą z GA4 (sekcja poniżej)."""
         kpi_ads_rows = (
             f"| Wyświetlenia (Google Ads) | {t['impressions']:,} |\n"
             f"| Kliknięcia | {t['clicks']:,} |\n"
             f"| CTR | {t['ctr_pct']}% |\n"
             f"| Średni CPC | {avg_cpc} zł |\n"
             f"| Wydatki łącznie | {t['cost_pln']} zł |\n"
-            f"| Konwersje (Google Ads) | {t['conversions']} |\n"
-            f"| Koszt konwersji | {t['cost_per_conversion_pln']} zł |\n"
-            f"| Współczynnik konwersji | {conv_rate}% |\n"
         )
 
     ga4_section = "Brak danych Google Analytics 4 (konto nie zostało znalezione)."
@@ -438,8 +433,9 @@ OKRES: {month_label}
 - DOSTOSUJ ton, terminologię, przykłady i interpretacje do branży klienta opisanej w PROFILU DZIAŁALNOŚCI powyżej. Nigdy nie zakładaj branży na podstawie nazw kampanii — bazuj wyłącznie na profilu
 - Styl analityczny: opisuj działania, interpretuj wyniki, wyciągaj wnioski biznesowe odpowiednie dla branży klienta
 - Używaj **pogrubień** dla kluczowych liczb i wniosków
-- Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — w zależności od branży klienta) to najważniejszy wskaźnik — zawsze je wyróżniaj z konkretnymi liczbami
+- KONWERSJE: korzystamy WYŁĄCZNIE z danych GA4 (sekcja "Konwersje per zdarzenie"). NIE wymieniaj konwersji ani kosztu konwersji z Google Ads — te dane są niedostępne / niewiarygodne. Nie pisz "koszt konwersji X zł" ani "współczynnik konwersji X%" w odniesieniu do Google Ads. Jeśli musisz policzyć efektywność kampanii, opieraj się na CTR, średnim CPC i wydatkach — nie na konwersjach
 - Każde zdarzenie konwersji wymienione w tabeli GA4 podaj z DOKŁADNĄ liczbą konwersji. Pomijaj zdarzenia z liczbą 0
+- Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — w zależności od branży klienta) to najważniejszy wskaźnik — zawsze je wyróżniaj z konkretnymi liczbami z GA4
 - Jeśli kampania była uruchomiona w trakcie miesiąca — zaznacz to (np. "kampania uruchomiona 13 marca")
 - Kampanie, które miały aktywność ale są wstrzymane — opisuj ich wyniki, NIE sugeruj zmian w nich
 - Jeśli coś spada — wyjaśnij możliwą przyczynę i co zostało zrobione w odpowiedzi
@@ -533,7 +529,8 @@ def generate_report(prompt: str) -> str:
         "DOSTOSOWUJESZ ton, terminologię, przykłady i interpretacje do branży klienta — zawsze opieraj się na sekcji PROFIL DZIAŁALNOŚCI w prompcie użytkownika. "
         "Nie używaj nazw branż ani przykładów spoza tego profilu (np. nie pisz o restauracji, jeśli klient jest e-commerce). "
         "Zawsze podajesz konkretne liczby. Każdą konwersję z tabeli GA4 wymieniasz z dokładną liczbą. "
-        "Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — zależnie od branży) to kluczowe wskaźniki — zawsze je wyróżniasz. "
+        "KONWERSJE BIERZESZ WYŁĄCZNIE Z GA4 — NIGDY nie wspominaj konwersji, kosztu konwersji ani współczynnika konwersji z Google Ads (są niewiarygodne / niedostępne w tym koncie). "
+        "Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — zależnie od branży) to kluczowe wskaźniki — zawsze je wyróżniasz w oparciu o dane GA4. "
         "ŚCIŚLE TRZYMASZ SIĘ ZAKRESU SPECJALISTY MARKETINGU CYFROWEGO: Google Ads, SEO, UX strony, analityka, treści reklamowe i landing page. "
         "NIGDY nie proponujesz rozwiązań z obszaru HR (rekrutacja), operacji firmy, logistyki, polityki cenowej, struktury organizacyjnej. "
         "Wszystkie rekomendacje muszą być wykonalne przez agencję marketingową lub specjalistę Google Ads. "
@@ -612,7 +609,7 @@ def run(client_name: str) -> None:
             print(
                 f"   Wydatki: {ads_data['totals']['cost_pln']} zł  |  "
                 f"Kliknięcia: {ads_data['totals']['clicks']}  |  "
-                f"Konwersje: {ads_data['totals']['conversions']}"
+                f"CTR: {ads_data['totals']['ctr_pct']}%"
             )
         except Exception as e:
             print(f"⚠️  Błąd pobierania danych Google Ads: {e}")
