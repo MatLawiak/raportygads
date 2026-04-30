@@ -903,9 +903,33 @@ def page_generate():
         report_type = st.selectbox("Typ raportu", ["Miesięczny", "Tygodniowy"])
 
     if report_type == "Miesięczny":
-        from main import get_last_full_month
-        date_from, date_to = get_last_full_month()
-        period_label = date.fromisoformat(date_from).strftime("%B %Y")
+        import calendar
+        today = date.today()
+        # Domyślnie poprzedni miesiąc
+        default_month = today.month - 1 if today.month > 1 else 12
+        default_year  = today.year if today.month > 1 else today.year - 1
+
+        mc1, mc2 = st.columns(2)
+        with mc1:
+            months_pl = ["Styczeń","Luty","Marzec","Kwiecień","Maj","Czerwiec",
+                         "Lipiec","Sierpień","Wrzesień","Październik","Listopad","Grudzień"]
+            selected_month = st.selectbox(
+                "Miesiąc",
+                options=list(range(1, 13)),
+                format_func=lambda m: months_pl[m - 1],
+                index=default_month - 1,
+            )
+        with mc2:
+            selected_year = st.selectbox(
+                "Rok",
+                options=list(range(today.year - 3, today.year + 1)),
+                index=today.year - (today.year - 3) - (0 if today.month > 1 else 1),
+            )
+
+        last_day = calendar.monthrange(selected_year, selected_month)[1]
+        date_from   = f"{selected_year}-{selected_month:02d}-01"
+        date_to     = f"{selected_year}-{selected_month:02d}-{last_day:02d}"
+        period_label = f"{months_pl[selected_month - 1]} {selected_year}"
     else:
         date_from, date_to = get_last_full_week()
         period_label = f"{date_from} – {date_to}"
