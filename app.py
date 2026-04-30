@@ -16,31 +16,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 import streamlit as st
-
-# ─── Logowanie ────────────────────────────────────────────────────────────────
-
-def check_password() -> bool:
-    """Zwraca True jeśli użytkownik podał prawidłowe hasło."""
-    password = os.environ.get("APP_PASSWORD", "")
-    if not password:
-        return True  # brak hasła w .env = tryb lokalny bez ochrony
-
-    if st.session_state.get("authenticated"):
-        return True
-
-    st.markdown("## Raporty Marketingowe")
-    st.markdown("Podaj hasło dostępu aby kontynuować.")
-    entered = st.text_input("Hasło", type="password", key="password_input")
-    if st.button("Zaloguj", type="primary"):
-        if entered == password:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Nieprawidłowe hasło.")
-    st.stop()
-
-
-check_password()
+import auth
 
 # ─── Ścieżki ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +39,7 @@ def init_from_secrets() -> None:
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(BASE_DIR / "ga4_credentials.json")
 
         # Klucze API
-        for key in ("OPENAI_API_KEY", "APP_PASSWORD"):
+        for key in ("OPENAI_API_KEY",):
             val = st.secrets.get(key, "")
             if val:
                 os.environ[key] = val
@@ -74,10 +50,14 @@ def init_from_secrets() -> None:
 
 init_from_secrets()
 
-CONFIG_FILE = BASE_DIR / "config.json"
 REPORTS_DIR = BASE_DIR / "raporty"
 REPORTS_DIR.mkdir(exist_ok=True)
 sys.path.insert(0, str(BASE_DIR))
+
+# Per-user paths — ustawiane po uwierzytelnieniu
+CONFIG_FILE: Path = BASE_DIR / "config.json"          # placeholder, nadpisywany po logowaniu
+GA4_CREDS_PATH: Path = BASE_DIR / "ga4_credentials.json"
+GADS_YAML_PATH: Path = BASE_DIR / "google-ads.yaml"
 
 # ─── Helpers konfiguracji ─────────────────────────────────────────────────────
 
@@ -123,8 +103,10 @@ st.markdown("""
 
 # ─── Stan sesji ───────────────────────────────────────────────────────────────
 
-if "config" not in st.session_state:
-    st.session_state.config = load_config()
+if "user_id" not in st.session_state:
+    st.session_state.user_id = None
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
 if "report_text" not in st.session_state:
     st.session_state.report_text = None
 if "report_filename" not in st.session_state:
@@ -134,12 +116,122 @@ if "report_client" not in st.session_state:
 if "show_faq" not in st.session_state:
     st.session_state.show_faq = False
 
+# ─── Landing page / Auth ──────────────────────────────────────────────────────
+
+ACCENT_L   = "#E8630A"
+ACCENT2_L  = "#1A3A5C"
+
+
+def show_landing() -> None:
+    st.markdown("""
+    <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        .block-container { padding-top: 0 !important; max-width: 860px; }
+    </style>""", unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style="background:linear-gradient(135deg,{ACCENT2_L} 0%,{ACCENT_L} 100%);
+                padding:56px 40px 48px;border-radius:0 0 20px 20px;text-align:center;margin-bottom:32px">
+        <p style="color:rgba(255,255,255,0.75);font-size:0.9rem;margin:0 0 10px;letter-spacing:.1em;text-transform:uppercase">
+            Generator Raportów Marketingowych
+        </p>
+        <h1 style="color:white;margin:0;font-size:2.4rem;font-weight:800;line-height:1.2">
+            Raporty Google Ads + GA4<br>gotowe w 30 sekund
+        </h1>
+        <p style="color:rgba(255,255,255,0.82);margin:18px 0 0;font-size:1.05rem;max-width:540px;margin-left:auto;margin-right:auto">
+            Podłącz swoje konto reklamowe i stronę internetową — aplikacja automatycznie pobierze dane
+            i wygeneruje profesjonalny raport miesięczny lub tygodniowy.
+        </p>
+    </div>""", unsafe_allow_html=True)
+
+    # Features
+    c1, c2, c3 = st.columns(3)
+    for col, icon, title, desc in [
+        (c1, "📈", "Google Ads", "Kampanie, kliknięcia, konwersje, CPC, CTR — wszystko w jednym miejscu."),
+        (c2, "🔍", "Google Analytics 4", "Ruch na stronie, źródła, zaangażowanie i konwersje GA4."),
+        (c3, "📧", "Wysyłka emailem", "Raport trafia automatycznie do skrzynki klienta po wygenerowaniu."),
+    ]:
+        col.markdown(f"""
+        <div style="background:#F9F9F9;border-radius:12px;padding:24px 20px;text-align:center;height:160px">
+            <div style="font-size:2rem">{icon}</div>
+            <p style="font-weight:700;color:{ACCENT2_L};margin:8px 0 6px">{title}</p>
+            <p style="color:#666;font-size:0.85rem;margin:0">{desc}</p>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Login / Register tabs
+    tab_login, tab_reg = st.tabs(["Zaloguj się", "Zarejestruj się — bezpłatnie"])
+
+    with tab_login:
+        with st.form("login_form"):
+            email_l = st.text_input("Adres email", placeholder="twoj@email.com")
+            pass_l  = st.text_input("Hasło", type="password")
+            if st.form_submit_button("Zaloguj się", type="primary", use_container_width=True):
+                if not email_l or not pass_l:
+                    st.error("Uzupełnij email i hasło.")
+                else:
+                    ok, result = auth.login(email_l, pass_l)
+                    if ok:
+                        st.session_state.user_id    = result
+                        st.session_state.user_email = email_l.lower().strip()
+                        st.rerun()
+                    else:
+                        st.error(result)
+
+    with tab_reg:
+        with st.form("register_form"):
+            email_r  = st.text_input("Adres email", placeholder="twoj@email.com", key="reg_email")
+            pass_r   = st.text_input("Hasło", type="password", key="reg_pass",
+                                     help="Minimum 8 znaków.")
+            pass_r2  = st.text_input("Powtórz hasło", type="password", key="reg_pass2")
+            st.caption("Rejestrując się akceptujesz, że aplikacja przechowuje Twoje dane logowania lokalnie.")
+            if st.form_submit_button("Zarejestruj się", type="primary", use_container_width=True):
+                if not email_r or "@" not in email_r:
+                    st.error("Podaj poprawny adres email.")
+                elif len(pass_r) < 8:
+                    st.error("Hasło musi mieć co najmniej 8 znaków.")
+                elif pass_r != pass_r2:
+                    st.error("Hasła nie są identyczne.")
+                else:
+                    ok, result = auth.register(email_r, pass_r)
+                    if ok:
+                        st.session_state.user_id    = result
+                        st.session_state.user_email = email_r.lower().strip()
+                        st.success("Konto utworzone. Witamy!")
+                        st.rerun()
+                    else:
+                        st.error(result)
+
+    st.stop()
+
+
+if not st.session_state.user_id:
+    show_landing()
+
+# ─── Per-user paths (po uwierzytelnieniu) ────────────────────────────────────
+
+_uid = st.session_state.user_id
+CONFIG_FILE      = BASE_DIR / f"config_{_uid}.json"
+GA4_CREDS_PATH   = BASE_DIR / f"ga4_{_uid}.json"
+GADS_YAML_PATH   = BASE_DIR / f"gads_{_uid}.yaml"
+
+# Ustaw GOOGLE_APPLICATION_CREDENTIALS na plik per-user jeśli istnieje
+if GA4_CREDS_PATH.exists():
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
+
+# Załaduj config per-user do sesji (tylko przy pierwszym uruchomieniu po logowaniu)
+if "config" not in st.session_state or st.session_state.get("config_user") != _uid:
+    st.session_state.config = load_config()
+    st.session_state.config_user = _uid
+
 cfg: dict = st.session_state.config
 
 # ─── Pasek boczny ─────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("### 📊 Raporty Marketingowe")
+    st.caption(st.session_state.user_email or "")
     st.markdown("---")
     page = st.radio(
         "Nawigacja",
@@ -150,18 +242,23 @@ with st.sidebar:
 
     # Szybki status API
     openai_ok = bool(os.environ.get("OPENAI_API_KEY"))
-    gads_ok = (BASE_DIR / "google-ads.yaml").exists()
-    ga4_ok = bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")) or (BASE_DIR / "ga4_credentials.json").exists()
+    gads_ok   = GADS_YAML_PATH.exists()
+    ga4_ok    = GA4_CREDS_PATH.exists()
 
     st.caption("Status API")
     st.write("🟢 OpenAI" if openai_ok else "🔴 OpenAI — brak klucza")
     st.write("🟢 Google Ads" if gads_ok else "🔴 Google Ads — brak pliku")
     st.write("🟢 GA4" if ga4_ok else "🟡 GA4 — brak credentials")
 
-    st.markdown("<br>" * 8, unsafe_allow_html=True)
+    st.markdown("<br>" * 6, unsafe_allow_html=True)
     st.markdown("---")
     if st.button("❓ Pomoc / FAQ", use_container_width=True):
         st.session_state.show_faq = True
+        st.rerun()
+    if st.button("Wyloguj", use_container_width=True):
+        for key in ["user_id", "user_email", "config", "config_user",
+                    "report_text", "report_filename", "report_client"]:
+            st.session_state.pop(key, None)
         st.rerun()
 
 
@@ -240,6 +337,9 @@ def generate_full_report(
 
     if client.get("ads_customer_id"):
         try:
+            # Wskaż per-user plik konfiguracyjny Google Ads
+            if GADS_YAML_PATH.exists():
+                os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
             ads_data = fetch_google_ads_data(client["ads_customer_id"], date_from, date_to)
         except Exception as e:
             st.warning(f"Google Ads: nie udało się pobrać danych — {e}")
@@ -1017,11 +1117,10 @@ def page_settings():
     st.subheader("Google Ads — konfiguracja")
     st.caption("Wgraj gotowy plik google-ads.yaml lub wypełnij dane ręcznie.")
 
-    gads_yaml_path = BASE_DIR / "google-ads.yaml"
-    if gads_yaml_path.exists():
+    if GADS_YAML_PATH.exists():
         st.success("Plik google-ads.yaml jest wgrany.")
         if st.button("Usuń konfigurację Google Ads"):
-            gads_yaml_path.unlink()
+            GADS_YAML_PATH.unlink()
             st.success("Plik usunięty.")
             st.rerun()
     else:
@@ -1033,7 +1132,7 @@ def page_settings():
         help="Plik pobierasz z panelu Google Ads lub generujesz przez google-ads-python.",
     )
     if uploaded_yaml is not None:
-        gads_yaml_path.write_bytes(uploaded_yaml.read())
+        GADS_YAML_PATH.write_bytes(uploaded_yaml.read())
         st.success("Plik google-ads.yaml zapisany.")
         st.rerun()
 
@@ -1064,7 +1163,7 @@ def page_settings():
                         f"refresh_token: {refresh_token.strip()}\n"
                         f"login_customer_id: {login_cid.strip().replace('-', '')}\n"
                     )
-                    gads_yaml_path.write_text(yaml_content, encoding="utf-8")
+                    GADS_YAML_PATH.write_text(yaml_content, encoding="utf-8")
                     st.success("Konfiguracja Google Ads zapisana.")
                     st.rerun()
                 else:
@@ -1074,16 +1173,13 @@ def page_settings():
     # ── GA4 Service Account ───────────────────────────────────────────────────
     st.subheader("Google Analytics 4 — credentials")
 
-    ga4_creds_path = BASE_DIR / "ga4_credentials.json"
-    ga4_env = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
-
-    if ga4_creds_path.exists():
-        st.success(f"Plik credentials wgrany: `ga4_credentials.json`")
+    if GA4_CREDS_PATH.exists():
+        st.success(f"Plik credentials wgrany.")
         col1, col2 = st.columns([3, 1])
         with col2:
             if st.button("Usuń credentials GA4"):
-                ga4_creds_path.unlink()
-                update_env_key("GOOGLE_APPLICATION_CREDENTIALS", "")
+                GA4_CREDS_PATH.unlink()
+                os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
                 st.success("Credentials usunięte.")
                 st.rerun()
     else:
@@ -1098,8 +1194,8 @@ def page_settings():
         ),
     )
     if uploaded is not None:
-        ga4_creds_path.write_bytes(uploaded.read())
-        update_env_key("GOOGLE_APPLICATION_CREDENTIALS", str(ga4_creds_path))
+        GA4_CREDS_PATH.write_bytes(uploaded.read())
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
         st.success("Credentials GA4 zapisane. Status GA4 zmienił się na aktywny.")
         st.rerun()
 
@@ -1231,8 +1327,8 @@ def page_settings():
     st.subheader("Status konfiguracji API")
 
     openai_key = os.environ.get("OPENAI_API_KEY", "")
-    gads_yaml = (BASE_DIR / "google-ads.yaml").exists()
-    ga4_creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "") or str(BASE_DIR / "ga4_credentials.json") if (BASE_DIR / "ga4_credentials.json").exists() else ""
+    gads_yaml  = GADS_YAML_PATH.exists()
+    ga4_creds  = str(GA4_CREDS_PATH) if GA4_CREDS_PATH.exists() else ""
 
     col1, col2, col3 = st.columns(3)
     with col1:

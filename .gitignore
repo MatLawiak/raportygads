@@ -1,8 +1,12 @@
 # Dane uwierzytelniające — NIGDY nie commituj tych plików!
 google-ads.yaml
+gads_*.yaml
 *.json
 .env
 service-account*.json
+
+# Baza użytkowników
+users.db
 
 # Wygenerowane raporty
 raporty/
