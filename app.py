@@ -1559,6 +1559,19 @@ Przejdź do **Ustawienia → Google Analytics 4** i wgraj pobrany plik JSON.
 - W Google Analytics: **Ustawienia → Informacje o usłudze → Identyfikator usługi**
 - To liczba, np. `123456789`
 - Wpisz ją w zakładce **Klienci** przy danym kliencie
+
+---
+
+**Czy jeden plik JSON wystarczy dla wielu klientów?**
+
+Tak — jeden plik Service Account działa dla wszystkich klientów.
+Wystarczy, że dla każdego nowego klienta dodasz email konta usługi jako Czytelnika w jego GA4:
+
+1. Wejdź do GA4 klienta → **Ustawienia → Zarządzanie dostępem do usługi**
+2. Kliknij **+** → wpisz email konta usługi (np. `raporty@raporty-489018.iam.gserviceaccount.com`)
+3. Rola: **Czytelnik** → zapisz
+
+Email konta usługi znajdziesz w pobranym pliku JSON pod kluczem `client_email`.
         """)
 
     # ── SMTP Email ───────────────────────────────────────────────────────────
