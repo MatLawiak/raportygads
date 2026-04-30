@@ -38,8 +38,8 @@ def init_from_secrets() -> None:
             (BASE_DIR / "ga4_credentials.json").write_text(ga4_json, encoding="utf-8")
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(BASE_DIR / "ga4_credentials.json")
 
-        # Klucze API
-        for key in ("OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ENCRYPTION_KEY"):
+        # Klucze infrastruktury (NIE openai_key — każdy user dodaje własny)
+        for key in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ENCRYPTION_KEY"):
             val = st.secrets.get(key, "")
             if val:
                 os.environ[key] = val
@@ -298,8 +298,21 @@ def get_last_full_week() -> tuple[str, str]:
     return str(last_monday), str(last_sunday)
 
 
-def build_weekly_prompt(client_name: str, period_label: str, ads_data: dict, ga4_data: dict) -> str:
+def build_weekly_prompt(
+    client_name: str,
+    period_label: str,
+    ads_data: dict,
+    ga4_data: dict,
+    business_profile: str = "",
+) -> str:
     from main import _format_campaigns_table, _format_sources_table
+
+    profile_section = ""
+    if business_profile.strip():
+        profile_section = (
+            "\n=== PROFIL DZIAŁALNOŚCI KLIENTA (kluczowe — używaj jako kontekst) ===\n"
+            f"{business_profile.strip()}\n"
+        )
 
     ads_section = "Brak danych Google Ads za ten tydzień."
     if ads_data:
@@ -322,25 +335,28 @@ def build_weekly_prompt(client_name: str, period_label: str, ads_data: dict, ga4
 
 KLIENT: {client_name}
 TYDZIEŃ: {period_label}
-
+{profile_section}
 === GOOGLE ADS ===
 {ads_section}
 
 === GOOGLE ANALYTICS 4 ===
 {ga4_section}
 
+=== ZASADY ===
+- DOSTOSUJ ton i interpretacje do branży klienta z PROFILU DZIAŁALNOŚCI powyżej. Nigdy nie zakładaj branży na podstawie nazw kampanii.
+
 === FORMAT (trzymaj się go ściśle) ===
 ## Wyniki tygodnia — Google Ads
-(tabela z kluczowymi metrykami + 2 zdania komentarza)
+(tabela z kluczowymi metrykami + 2 zdania komentarza dostosowane do branży)
 
 ## Ruch na stronie — GA4
 (jeśli dane dostępne, inaczej napisz że brak danych)
 
 ## Co zwraca uwagę
-(maks. 3 punkty — tylko to co istotne)
+(maks. 3 punkty — tylko to co istotne dla tej branży)
 
 ## Działania na przyszły tydzień
-(maks. 3 punkty — konkretne, krótkie)
+(maks. 3 punkty — konkretne, krótkie, adekwatne do branży)
 
 Pisz po polsku. Prosto, bez żargonu. Maksymalnie 350 słów łącznie."""
 
@@ -377,10 +393,12 @@ def generate_full_report(
         except Exception as e:
             st.warning(f"GA4: nie udało się pobrać danych — {e}")
 
+    business_profile = client.get("business_profile", "")
+
     if report_type == "Tygodniowy":
-        prompt = build_weekly_prompt(client["name"], period_label, ads_data, ga4_data)
+        prompt = build_weekly_prompt(client["name"], period_label, ads_data, ga4_data, business_profile)
     else:
-        prompt = build_report_prompt(client["name"], period_label, ads_data, ga4_data)
+        prompt = build_report_prompt(client["name"], period_label, ads_data, ga4_data, business_profile)
 
     report_text = generate_report(prompt)
 
@@ -1046,6 +1064,21 @@ def page_clients():
                             value=client.get("ga4_property_id", ""),
                             key=f"ga4_e_{i}",
                         )
+                    profile_edit = st.text_area(
+                        "Profil działalności",
+                        value=client.get("business_profile", ""),
+                        key=f"profile_e_{i}",
+                        height=120,
+                        help=(
+                            "Krótki opis branży, oferty i celów konwersji. "
+                            "AI użyje tego jako kontekstu — bez tego raport może błędnie zakładać branżę."
+                        ),
+                        placeholder=(
+                            "np. Sklep internetowy z odżywkami i suplementami diety dla sportowców. "
+                            "Główne kanały sprzedaży: sklep własny i Allegro. "
+                            "Kluczowa konwersja: zakończenie transakcji w sklepie."
+                        ),
+                    )
                     save_col, del_col = st.columns([2, 1])
                     with save_col:
                         saved = st.form_submit_button("Zapisz zmiany", type="primary", use_container_width=True)
@@ -1057,6 +1090,7 @@ def page_clients():
                         "name": name_edit.strip(),
                         "ads_customer_id": ads_edit.strip(),
                         "ga4_property_id": ga4_edit.strip(),
+                        "business_profile": profile_edit.strip(),
                     })
                     save_config(cfg)
                     st.session_state.saved_client = name_edit.strip()
@@ -1094,6 +1128,19 @@ def page_clients():
                 placeholder="np. 987654321",
                 help="ID property w Google Analytics 4. Znajdziesz je w: Ustawienia → Informacje o usłudze.",
             )
+        profile = st.text_area(
+            "Profil działalności",
+            height=120,
+            help=(
+                "Krótki opis branży, oferty i celów konwersji. "
+                "AI użyje tego jako kontekstu — bez tego raport może błędnie zakładać branżę."
+            ),
+            placeholder=(
+                "np. Sklep internetowy z odżywkami i suplementami diety dla sportowców. "
+                "Główne kanały sprzedaży: sklep własny i Allegro. "
+                "Kluczowa konwersja: zakończenie transakcji w sklepie."
+            ),
+        )
 
         if st.form_submit_button("Dodaj klienta", type="primary"):
             if not name.strip():
@@ -1106,6 +1153,7 @@ def page_clients():
                     "name": name.strip(),
                     "ads_customer_id": ads_id.strip(),
                     "ga4_property_id": ga4_id.strip(),
+                    "business_profile": profile.strip(),
                 })
                 save_config(cfg)
                 st.success(f"Dodano klienta: **{name.strip()}**")

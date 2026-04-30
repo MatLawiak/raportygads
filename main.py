@@ -8,6 +8,7 @@ Użycie:
     python main.py  # pyta o nazwę interaktywnie
 """
 
+import os
 import sys
 import json
 from datetime import date
@@ -137,7 +138,8 @@ def fetch_google_ads_data(customer_id: str, date_from: str, date_to: str) -> dic
     """
     from google.ads.googleads.client import GoogleAdsClient
 
-    client = GoogleAdsClient.load_from_storage("google-ads.yaml")
+    yaml_path = os.environ.get("GOOGLE_ADS_CONFIGURATION_FILE_PATH", "google-ads.yaml")
+    client = GoogleAdsClient.load_from_storage(yaml_path)
     googleads_service = client.get_service("GoogleAdsService")
 
     query = f"""
@@ -320,8 +322,16 @@ def build_report_prompt(
     month_label: str,
     ads_data: dict,
     ga4_data: dict,
+    business_profile: str = "",
 ) -> str:
     """Buduje prompt użytkownika do generowania raportu."""
+
+    profile_section = ""
+    if business_profile.strip():
+        profile_section = (
+            "\n=== PROFIL DZIAŁALNOŚCI KLIENTA (kluczowe — używaj jako kontekst) ===\n"
+            f"{business_profile.strip()}\n"
+        )
 
     ads_section = "Brak danych Google Ads (konto nie zostało znalezione)."
     if ads_data:
@@ -361,7 +371,7 @@ Konwersje per zdarzenie (KLUCZOWE — uwzględnij w raporcie):
 
 KLIENT: {client_name}
 OKRES: {month_label}
-
+{profile_section}
 === GOOGLE ADS ===
 {ads_section}
 
@@ -369,10 +379,11 @@ OKRES: {month_label}
 {ga4_section}
 
 === ZASADY PISANIA ===
-- Pisz po polsku, językiem profesjonalnym ale zrozumiałym — odbiorca to właścicielka restauracji
-- Styl analityczny: opisuj działania, interpretuj wyniki, wyciągaj wnioski biznesowe
+- Pisz po polsku, językiem profesjonalnym ale zrozumiałym — odbiorca to właściciel firmy bez wiedzy technicznej
+- DOSTOSUJ ton, terminologię, przykłady i interpretacje do branży klienta opisanej w PROFILU DZIAŁALNOŚCI powyżej. Nigdy nie zakładaj branży na podstawie nazw kampanii — bazuj wyłącznie na profilu
+- Styl analityczny: opisuj działania, interpretuj wyniki, wyciągaj wnioski biznesowe odpowiednie dla branży klienta
 - Używaj **pogrubień** dla kluczowych liczb i wniosków
-- Konwersje (wysłanie formularza, kliknięcie w telefon) to najważniejszy wskaźnik — zawsze je wyróżniaj z konkretnymi liczbami
+- Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — w zależności od branży klienta) to najważniejszy wskaźnik — zawsze je wyróżniaj z konkretnymi liczbami
 - Jeśli kampania była uruchomiona w trakcie miesiąca — zaznacz to (np. "kampania uruchomiona 13 marca")
 - Kampanie, które miały aktywność ale są wstrzymane — opisuj ich wyniki, NIE sugeruj zmian w nich
 - Jeśli coś spada — wyjaśnij możliwą przyczynę i co zostało zrobione w odpowiedzi
@@ -383,9 +394,9 @@ OKRES: {month_label}
 
 ## 1. Realizacja strategii i wyniki kampanii
 
-[Akapit 1 — ogólne podsumowanie miesiąca: jakie działania prowadzono, łączne wyniki (kliknięcia, konwersje, koszt konwersji, współczynnik konwersji). Napisz co to oznacza biznesowo dla restauracji.]
+[Akapit 1 — ogólne podsumowanie miesiąca: jakie działania prowadzono, łączne wyniki (kliknięcia, konwersje, koszt konwersji, współczynnik konwersji). Napisz co to oznacza biznesowo dla firmy klienta — uwzględnij specyfikę branży z PROFILU DZIAŁALNOŚCI.]
 
-[Akapit 2 — wskaż kluczowe typy konwersji z liczbami: ile wysłanych formularzy, ile kliknięć w telefon, ile przejść do kontaktu.]
+[Akapit 2 — wskaż kluczowe typy konwersji z liczbami, dopasowane do branży klienta (np. dla e-commerce: transakcje; dla usług lokalnych: formularze i telefony; dla SaaS: rejestracje).]
 
 ## 2. Porównanie efektywności kampanii
 
@@ -397,7 +408,7 @@ OKRES: {month_label}
 
 ## 4. Plan na kolejny miesiąc
 
-[5 konkretnych punktów — każdy: **Działanie:** opis → uzasadnienie w jednym zdaniu]
+[5 konkretnych punktów — każdy: **Działanie:** opis → uzasadnienie w jednym zdaniu. Działania mają być adekwatne do branży klienta.]
 
 ---
 *Raport przygotowany na podstawie danych z Google Ads i Google Analytics 4 za {month_label}*
@@ -413,12 +424,14 @@ def generate_report(prompt: str) -> str:
     client = OpenAI()  # używa zmiennej OPENAI_API_KEY
 
     system_prompt = (
-        "Jesteś doświadczonym specjalistą Google Ads i Analytics piszącym miesięczny raport marketingowy. "
-        "Raporty piszesz po polsku, językiem analitycznym i profesjonalnym, zrozumiałym dla właścicielki restauracji. "
-        "Styl wzorcowy: 'W marcu działania reklamowe zostały rozszerzone o komunikację związaną z cateringiem. "
+        "Jesteś doświadczonym specjalistą Google Ads i Analytics piszącym raport marketingowy. "
+        "Raporty piszesz po polsku, językiem analitycznym i profesjonalnym, zrozumiałym dla właściciela firmy bez wiedzy technicznej. "
+        "DOSTOSOWUJESZ ton, terminologię, przykłady i interpretacje do branży klienta — zawsze opieraj się na sekcji PROFIL DZIAŁALNOŚCI w prompcie użytkownika. "
+        "Nie używaj nazw branż ani przykładów spoza tego profilu (np. nie pisz o restauracji, jeśli klient jest e-commerce). "
+        "Styl wzorcowy: 'W marcu działania reklamowe zostały rozszerzone o nową kampanię. "
         "Kampanie wygenerowały X kliknięć oraz Y konwersji przy współczynniku konwersji Z%.'. "
-        "Zawsze podajesz konkretne liczby. Interpretujesz dane biznesowo. "
-        "Konwersje formularzy i kliknięcia w telefon to kluczowe wskaźniki — zawsze je wyróżniasz. "
+        "Zawsze podajesz konkretne liczby. Interpretujesz dane biznesowo w kontekście branży klienta. "
+        "Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — zależnie od branży) to kluczowe wskaźniki — zawsze je wyróżniasz. "
         "Formatujesz w Markdown z nagłówkami ## i **pogrubieniami**. Nie używasz emoji."
     )
 
