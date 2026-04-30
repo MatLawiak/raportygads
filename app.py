@@ -39,7 +39,7 @@ def init_from_secrets() -> None:
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(BASE_DIR / "ga4_credentials.json")
 
         # Klucze API
-        for key in ("OPENAI_API_KEY",):
+        for key in ("OPENAI_API_KEY", "DATABASE_URL"):
             val = st.secrets.get(key, "")
             if val:
                 os.environ[key] = val
