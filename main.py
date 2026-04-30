@@ -297,12 +297,15 @@ def fetch_ga4_data(property_id: str, date_from: str, date_to: str) -> dict:
 def _format_campaigns_table(campaigns: list[dict]) -> str:
     if not campaigns:
         return "Brak aktywnych kampanii w tym okresie."
-    lines = ["| Kampania | Wydatki (zł) | Kliknięcia | CTR% | Konwersje | Koszt/konw. |",
-             "|----------|-------------|------------|------|-----------|-------------|"]
+    lines = [
+        "| Kampania | Wyświetlenia | Kliknięcia | CTR% | Śr. CPC (zł) | Konwersje | Koszt/konw. (zł) | Wydatki (zł) |",
+        "|----------|-------------|------------|------|--------------|-----------|------------------|--------------|",
+    ]
     for c in campaigns:
         lines.append(
-            f"| {c['name']} | {c['cost_pln']} | {c['clicks']} "
-            f"| {c['ctr_pct']} | {c['conversions']} | {c['cost_per_conversion_pln']} |"
+            f"| {c['name']} | {c['impressions']:,} | {c['clicks']:,} | "
+            f"{c['ctr_pct']} | {c['avg_cpc_pln']} | {c['conversions']} | "
+            f"{c['cost_per_conversion_pln']} | {c['cost_pln']} |"
         )
     return "\n".join(lines)
 
@@ -310,10 +313,14 @@ def _format_campaigns_table(campaigns: list[dict]) -> str:
 def _format_sources_table(sources: list[dict]) -> str:
     if not sources:
         return "Brak danych o źródłach ruchu."
-    lines = ["| Kanał | Sesje | Użytkownicy |",
-             "|-------|-------|-------------|"]
+    total_sessions = sum(s["sessions"] for s in sources) or 1
+    lines = [
+        "| Kanał | Sesje | Udział % | Użytkownicy |",
+        "|-------|-------|----------|-------------|",
+    ]
     for s in sources:
-        lines.append(f"| {s['channel']} | {s['sessions']} | {s['users']} |")
+        share = round(s["sessions"] / total_sessions * 100, 1)
+        lines.append(f"| {s['channel']} | {s['sessions']:,} | {share}% | {s['users']:,} |")
     return "\n".join(lines)
 
 
@@ -334,38 +341,75 @@ def build_report_prompt(
         )
 
     ads_section = "Brak danych Google Ads (konto nie zostało znalezione)."
+    kpi_ads_rows = ""
+    campaigns_table_md = ""
     if ads_data:
         t = ads_data["totals"]
-        campaigns_table = _format_campaigns_table(ads_data.get("campaigns", []))
-        ads_section = f"""Łączne wydatki: {t['cost_pln']} zł
-Kliknięcia: {t['clicks']}
-Wyświetlenia: {t['impressions']}
+        avg_cpc = round(t["cost_pln"] / t["clicks"], 2) if t["clicks"] else 0
+        conv_rate = round(t["conversions"] / t["clicks"] * 100, 2) if t["clicks"] else 0
+        campaigns_table_md = _format_campaigns_table(ads_data.get("campaigns", []))
+        ads_section = f"""Wyświetlenia: {t['impressions']:,}
+Kliknięcia: {t['clicks']:,}
 CTR: {t['ctr_pct']}%
+Średni CPC: {avg_cpc} zł
+Łączne wydatki: {t['cost_pln']} zł
 Konwersje: {t['conversions']}
 Koszt za konwersję: {t['cost_per_conversion_pln']} zł
+Współczynnik konwersji: {conv_rate}%
 
 Wyniki per kampania:
-{campaigns_table}"""
+{campaigns_table_md}"""
+        kpi_ads_rows = (
+            f"| Wyświetlenia (Google Ads) | {t['impressions']:,} |\n"
+            f"| Kliknięcia | {t['clicks']:,} |\n"
+            f"| CTR | {t['ctr_pct']}% |\n"
+            f"| Średni CPC | {avg_cpc} zł |\n"
+            f"| Wydatki łącznie | {t['cost_pln']} zł |\n"
+            f"| Konwersje (Google Ads) | {t['conversions']} |\n"
+            f"| Koszt konwersji | {t['cost_per_conversion_pln']} zł |\n"
+            f"| Współczynnik konwersji | {conv_rate}% |\n"
+        )
 
     ga4_section = "Brak danych Google Analytics 4 (konto nie zostało znalezione)."
+    sources_table_md = ""
+    kpi_ga4_rows = ""
     if ga4_data:
         g = ga4_data["general"]
-        sources_table = _format_sources_table(ga4_data.get("sources", []))
+        sources_table_md = _format_sources_table(ga4_data.get("sources", []))
         conv_events = ga4_data.get("conversion_events", [])
         conv_lines = "\n".join(
             f"  - {e['event']}: {e['conversions']} konwersji ({e['count']} zdarzeń)"
             for e in conv_events
         ) if conv_events else "  Brak zarejestrowanych konwersji."
-        ga4_section = f"""Użytkownicy: {g['users']}
-Sesje: {g['sessions']}
+        engagement = round(100 - g["bounce_rate_pct"], 1)
+        dur = g["avg_session_duration_sec"]
+        dur_label = f"{dur//60}m {dur%60}s"
+        ga4_section = f"""Użytkownicy: {g['users']:,}
+Sesje: {g['sessions']:,}
 Współczynnik odrzuceń: {g['bounce_rate_pct']}%
-Średni czas wizyty: {g['avg_session_duration_sec']} sekund
+Współczynnik zaangażowania: {engagement}%
+Średni czas wizyty: {dur} sekund ({dur_label})
+Konwersje GA4: {g.get('conversions', 0)}
 
 Źródła ruchu:
-{sources_table}
+{sources_table_md}
 
 Konwersje per zdarzenie (KLUCZOWE — uwzględnij w raporcie):
 {conv_lines}"""
+        kpi_ga4_rows = (
+            f"| Użytkownicy strony | {g['users']:,} |\n"
+            f"| Sesje | {g['sessions']:,} |\n"
+            f"| Średni czas wizyty | {dur_label} |\n"
+            f"| Współczynnik zaangażowania | {engagement}% |\n"
+            f"| Współczynnik odrzuceń | {g['bounce_rate_pct']}% |\n"
+            f"| Konwersje GA4 | {g.get('conversions', 0)} |\n"
+        )
+
+    kpi_table_md = (
+        "| Wskaźnik | Wartość |\n"
+        "|----------|---------|\n"
+        f"{kpi_ads_rows}{kpi_ga4_rows}"
+    ) if (kpi_ads_rows or kpi_ga4_rows) else "_Brak danych do wygenerowania tabeli wskaźników._"
 
     return f"""Wygeneruj profesjonalny raport miesięczny na podstawie poniższych danych.
 
@@ -390,23 +434,43 @@ OKRES: {month_label}
 - Jeśli coś rośnie — podkreśl co na to wpłynęło
 - Nie używaj emoji
 
-=== FORMAT RAPORTU (trzymaj się go ściśle) ===
+=== FORMAT RAPORTU (trzymaj się go ściśle, NIE pomijaj żadnej sekcji ani tabeli) ===
 
-## 1. Realizacja strategii i wyniki kampanii
+## 1. Kluczowe wskaźniki — {month_label}
 
-[Akapit 1 — ogólne podsumowanie miesiąca: jakie działania prowadzono, łączne wyniki (kliknięcia, konwersje, koszt konwersji, współczynnik konwersji). Napisz co to oznacza biznesowo dla firmy klienta — uwzględnij specyfikę branży z PROFILU DZIAŁALNOŚCI.]
+[Wstaw DOKŁADNIE poniższą tabelę bez zmian — to jest źródło prawdy dla całego raportu:]
 
-[Akapit 2 — wskaż kluczowe typy konwersji z liczbami, dopasowane do branży klienta (np. dla e-commerce: transakcje; dla usług lokalnych: formularze i telefony; dla SaaS: rejestracje).]
+{kpi_table_md}
 
-## 2. Porównanie efektywności kampanii
+[Pod tabelą dopisz krótki, 2–3 zdaniowy komentarz interpretujący wskaźniki w kontekście branży klienta.]
 
-[Dla każdej kampanii osobny akapit lub bullet — nazwa, wyniki, ocena skuteczności, co wpłynęło na wyniki. Opisuj tylko kampanie które miały aktywność.]
+## 2. Realizacja strategii i wyniki kampanii
 
-## 3. Analiza źródeł ruchu na stronie
+[Akapit 1 — ogólne podsumowanie miesiąca: jakie działania prowadzono, jak wskaźniki przekładają się na cele biznesowe firmy klienta. Uwzględnij specyfikę branży z PROFILU DZIAŁALNOŚCI. Nie powtarzaj liczb z tabeli wskaźników — interpretuj je.]
 
-[Akapit o głównych źródłach ruchu — które kanały dominują, jaka jest jakość ruchu (czas na stronie, zaangażowanie). Odnieś ruch do kampanii.]
+[Akapit 2 — wskaż kluczowe typy konwersji z liczbami, dopasowane do branży klienta (np. dla e-commerce: transakcje; dla usług lokalnych: formularze i telefony; dla SaaS: rejestracje; dla deweloperów: zapytania o ofertę i umówione spotkania).]
 
-## 4. Plan na kolejny miesiąc
+## 3. Porównanie efektywności kampanii
+
+[Wstaw DOKŁADNIE poniższą tabelę bez zmian:]
+
+{campaigns_table_md}
+
+[Pod tabelą — dla każdej kampanii 2–3 zdania komentarza: ocena skuteczności, co wpłynęło na wyniki, czy działa zgodnie z planem. Opisuj tylko kampanie które miały aktywność.]
+
+## 4. Analiza źródeł ruchu na stronie
+
+[Wstaw DOKŁADNIE poniższą tabelę bez zmian:]
+
+{sources_table_md}
+
+[Pod tabelą — akapit o głównych źródłach ruchu: które kanały dominują, jaka jest jakość ruchu (czas na stronie, zaangażowanie). Odnieś ruch do kampanii. Jeśli są dane o konwersjach per zdarzenie GA4 — wymień je z liczbami.]
+
+## 5. Wnioski i rekomendacje
+
+[3–4 punkty wniosków — co działa, co wymaga poprawy, jakie są ryzyka.]
+
+## 6. Plan na kolejny miesiąc
 
 [5 konkretnych punktów — każdy: **Działanie:** opis → uzasadnienie w jednym zdaniu. Działania mają być adekwatne do branży klienta.]
 

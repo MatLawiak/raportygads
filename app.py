@@ -754,8 +754,11 @@ def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga
         # Wyciągnij sekcje z wygenerowanego tekstu
         import re
         sections = re.split(r"#{1,3}\s+", report_text)
-        # Pokaż cały tekst raportu z wyjątkiem sekcji "Plan na kolejny miesiąc"
-        clean = re.sub(r"#{1,3}\s+4\. Plan na kolejny miesiąc.*", "", report_text, flags=re.DOTALL)
+        # Pokaż cały tekst raportu z wyjątkiem sekcji "Wnioski i rekomendacje" / "Plan na kolejny miesiąc"
+        clean = re.sub(
+            r"#{1,3}\s+\d+\.\s+(Wnioski i rekomendacje|Plan na kolejny miesiąc).*",
+            "", report_text, flags=re.DOTALL,
+        )
         st.markdown(clean)
 
         # Gauges podsumowujące
@@ -796,7 +799,10 @@ def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga
 
         # Wyciągnij sekcję planu z raportu
         import re
-        match = re.search(r"#{1,3}\s+4\. Plan na kolejny miesiąc(.*)", report_text, re.DOTALL)
+        match = re.search(
+            r"#{1,3}\s+\d+\.\s+(?:Wnioski i rekomendacje|Plan na kolejny miesiąc)(.*)",
+            report_text, re.DOTALL,
+        )
         if match:
             st.markdown(match.group(1).strip())
         else:
