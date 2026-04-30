@@ -484,12 +484,22 @@ def _plotly_table(header_vals: list, rows: list, height: int = None) -> None:
 
 # ─── Wizualizacja raportu ─────────────────────────────────────────────────────
 
-def render_visual_report(client_name: str, period_label: str, ads_data: dict, ga4_data: dict, report_text: str) -> None:
+def render_visual_report(
+    client_name: str,
+    period_label: str,
+    ads_data: dict,
+    ga4_data: dict,
+    report_text: str,
+    logo_b64: str = "",
+    logo_mime: str = "image/png",
+) -> None:
     import plotly.graph_objects as go
     import plotly.express as px
 
-    logo_b64 = cfg.get("logo_b64", "")
-    logo_mime = cfg.get("logo_mime", "image/png")
+    # Fallback do globalnego loga użytkownika jeśli klient nie ma własnego
+    if not logo_b64:
+        logo_b64 = cfg.get("logo_b64", "")
+        logo_mime = cfg.get("logo_mime", "image/png")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Strona tytułowa", "Google Ads", "Google Analytics", "Podsumowanie", "Wnioski i rekomendacje"
@@ -959,6 +969,8 @@ def _report_to_html(
     report_text: str,
     ads_data: dict = None,
     ga4_data: dict = None,
+    logo_b64: str = "",
+    logo_mime: str = "image/png",
 ) -> str:
     try:
         import markdown as _md
@@ -968,6 +980,13 @@ def _report_to_html(
         body_html = "<pre>" + html.escape(report_text) + "</pre>"
 
     charts_html = _build_charts_html(ads_data or {}, ga4_data or {})
+    logo_html = ""
+    if logo_b64:
+        logo_html = (
+            f'<img src="data:{logo_mime};base64,{logo_b64}" '
+            f'style="max-height:80px;margin-bottom:14px;background:white;'
+            f'padding:6px 10px;border-radius:6px">'
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="pl">
@@ -1048,6 +1067,7 @@ def _report_to_html(
 </head>
 <body>
 <div class="report-header">
+  {logo_html}
   <h1>{client_name}</h1>
   <p>Raport marketingowy &nbsp;|&nbsp; {period_label}</p>
 </div>
@@ -1267,6 +1287,12 @@ def page_generate():
                     st.session_state.report_ads_data = ads_data
                     st.session_state.report_ga4_data = ga4_data
                     st.session_state.report_period = period_label
+                    st.session_state.report_logo_b64 = (
+                        selected_client.get("logo_b64") or cfg.get("logo_b64", "")
+                    )
+                    st.session_state.report_logo_mime = (
+                        selected_client.get("logo_mime") or cfg.get("logo_mime", "image/png")
+                    )
                     _reset_editor_state()
                     st.success(f"Raport wygenerowany i zapisany jako `{filename}`")
                 except Exception as e:
@@ -1292,6 +1318,8 @@ def page_generate():
                 st.session_state.report_text,
                 st.session_state.get("report_ads_data", {}),
                 st.session_state.get("report_ga4_data", {}),
+                st.session_state.get("report_logo_b64", ""),
+                st.session_state.get("report_logo_mime", "image/png"),
             )
             st.download_button(
                 label="⬇ Pobierz (.html)",
@@ -1330,6 +1358,8 @@ def page_generate():
             st.session_state.get("report_ads_data", {}),
             st.session_state.get("report_ga4_data", {}),
             st.session_state.report_text,
+            st.session_state.get("report_logo_b64", ""),
+            st.session_state.get("report_logo_mime", "image/png"),
         )
 
         render_recommendations_editor(st.session_state.report_text)
@@ -1347,9 +1377,50 @@ def page_clients():
         st.session_state.saved_client = None
 
     if clients:
+        import base64
         st.subheader("Zapisane konta")
         for i, client in enumerate(clients):
             with st.expander(f"**{client['name']}**"):
+                # ── Logo klienta (poza formularzem — auto-zapis) ──────────
+                cur_logo  = client.get("logo_b64", "")
+                cur_mime  = client.get("logo_mime", "image/png")
+
+                logo_col1, logo_col2 = st.columns([3, 1])
+                with logo_col1:
+                    if cur_logo:
+                        st.markdown(
+                            f'<img src="data:{cur_mime};base64,{cur_logo}" '
+                            f'style="max-width:160px;background:#fff;padding:6px;border-radius:6px">',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.caption(
+                            "Brak loga klienta. Jeśli ustawione jest logo globalne (Ustawienia), "
+                            "zostanie użyte zamiast niego."
+                        )
+                with logo_col2:
+                    if cur_logo and st.button("Usuń logo", key=f"del_logo_{i}"):
+                        cfg["clients"][i]["logo_b64"]  = ""
+                        cfg["clients"][i]["logo_mime"] = ""
+                        save_config(cfg)
+                        st.rerun()
+
+                upl_logo = st.file_uploader(
+                    "Wgraj logo klienta (PNG / JPG)",
+                    type=["png", "jpg", "jpeg"],
+                    key=f"logo_upl_{i}",
+                )
+                if upl_logo is not None:
+                    mime = "image/png" if upl_logo.name.lower().endswith(".png") else "image/jpeg"
+                    b64 = base64.b64encode(upl_logo.read()).decode("utf-8")
+                    cfg["clients"][i]["logo_b64"]  = b64
+                    cfg["clients"][i]["logo_mime"] = mime
+                    save_config(cfg)
+                    st.success("Logo klienta zapisane.")
+                    st.rerun()
+
+                st.markdown("---")
+
                 with st.form(key=f"edit_form_{i}"):
                     name_edit = st.text_input("Nazwa klienta", value=client.get("name", ""), key=f"name_e_{i}")
                     col1, col2 = st.columns(2)
@@ -1443,6 +1514,11 @@ def page_clients():
                 "Kluczowa konwersja: zakończenie transakcji w sklepie."
             ),
         )
+        new_logo = st.file_uploader(
+            "Logo klienta (opcjonalnie — PNG / JPG)",
+            type=["png", "jpg", "jpeg"],
+            help="Pojawi się w nagłówku raportu HTML i wizualizacji.",
+        )
 
         if st.form_submit_button("Dodaj klienta", type="primary"):
             if not name.strip():
@@ -1450,13 +1526,19 @@ def page_clients():
             elif any(c["name"].lower() == name.strip().lower() for c in cfg["clients"]):
                 st.error("Klient o tej nazwie już istnieje.")
             else:
-                cfg["clients"].append({
+                import base64
+                new_client = {
                     "id": str(uuid.uuid4()),
                     "name": name.strip(),
                     "ads_customer_id": ads_id.strip(),
                     "ga4_property_id": ga4_id.strip(),
                     "business_profile": profile.strip(),
-                })
+                }
+                if new_logo is not None:
+                    mime = "image/png" if new_logo.name.lower().endswith(".png") else "image/jpeg"
+                    new_client["logo_b64"]  = base64.b64encode(new_logo.read()).decode("utf-8")
+                    new_client["logo_mime"] = mime
+                cfg["clients"].append(new_client)
                 save_config(cfg)
                 st.success(f"Dodano klienta: **{name.strip()}**")
                 st.rerun()
