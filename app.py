@@ -131,6 +131,8 @@ if "report_filename" not in st.session_state:
     st.session_state.report_filename = None
 if "report_client" not in st.session_state:
     st.session_state.report_client = None
+if "show_faq" not in st.session_state:
+    st.session_state.show_faq = False
 
 cfg: dict = st.session_state.config
 
@@ -141,7 +143,7 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio(
         "Nawigacja",
-        ["Generuj raport", "Klienci", "Ustawienia", "Pomoc / FAQ"],
+        ["Generuj raport", "Klienci", "Ustawienia"],
         label_visibility="collapsed",
     )
     st.markdown("---")
@@ -155,6 +157,12 @@ with st.sidebar:
     st.write("🟢 OpenAI" if openai_ok else "🔴 OpenAI — brak klucza")
     st.write("🟢 Google Ads" if gads_ok else "🔴 Google Ads — brak pliku")
     st.write("🟢 GA4" if ga4_ok else "🟡 GA4 — brak credentials")
+
+    st.markdown("<br>" * 8, unsafe_allow_html=True)
+    st.markdown("---")
+    if st.button("❓ Pomoc / FAQ", use_container_width=True):
+        st.session_state.show_faq = True
+        st.rerun()
 
 
 # ─── Helpers generowania ──────────────────────────────────────────────────────
@@ -1457,11 +1465,20 @@ Możesz dodać kilka adresów — raport zostanie wysłany do każdego z nich.
 
 # ─── Router ───────────────────────────────────────────────────────────────────
 
+if st.session_state.show_faq:
+    # powrót do głównej nawigacji po kliknięciu w radio
+    if "last_page" not in st.session_state or st.session_state.last_page != page:
+        st.session_state.show_faq = False
+        st.session_state.last_page = page
+    else:
+        page_faq()
+        st.stop()
+
+st.session_state.last_page = page
+
 if page == "Generuj raport":
     page_generate()
 elif page == "Klienci":
     page_clients()
 elif page == "Ustawienia":
     page_settings()
-elif page == "Pomoc / FAQ":
-    page_faq()
