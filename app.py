@@ -39,7 +39,7 @@ def init_from_secrets() -> None:
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(BASE_DIR / "ga4_credentials.json")
 
         # Klucze API
-        for key in ("OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"):
+        for key in ("OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY", "ENCRYPTION_KEY"):
             val = st.secrets.get(key, "")
             if val:
                 os.environ[key] = val
@@ -81,6 +81,9 @@ def load_config() -> dict:
 
 def save_config(cfg: dict) -> None:
     CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    uid = st.session_state.get("user_id")
+    if uid:
+        auth.save_user_data(uid, {"config_json": json.dumps(cfg, ensure_ascii=False)})
 
 
 # ─── Konfiguracja strony ──────────────────────────────────────────────────────
@@ -185,7 +188,11 @@ def show_landing() -> None:
             pass_r   = st.text_input("Hasło", type="password", key="reg_pass",
                                      help="Minimum 8 znaków.")
             pass_r2  = st.text_input("Powtórz hasło", type="password", key="reg_pass2")
-            st.caption("Rejestrując się akceptujesz, że aplikacja przechowuje Twoje dane logowania lokalnie.")
+            st.caption(
+                "Rejestrując się akceptujesz przechowywanie Twojego emaila i "
+                "zaszyfrowanych kluczy API w bazie danych (Supabase, region EU). "
+                "Możesz trwale usunąć konto w Ustawieniach."
+            )
             if st.form_submit_button("Zarejestruj się", type="primary", use_container_width=True):
                 if not email_r or "@" not in email_r:
                     st.error("Podaj poprawny adres email.")
@@ -216,14 +223,34 @@ CONFIG_FILE      = BASE_DIR / f"config_{_uid}.json"
 GA4_CREDS_PATH   = BASE_DIR / f"ga4_{_uid}.json"
 GADS_YAML_PATH   = BASE_DIR / f"gads_{_uid}.yaml"
 
-# Ustaw GOOGLE_APPLICATION_CREDENTIALS na plik per-user jeśli istnieje
-if GA4_CREDS_PATH.exists():
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
+# Odtwórz dane z Supabase przy starcie sesji (raz per login)
+if st.session_state.get("config_user") != _uid:
+    _ud = auth.load_user_data(_uid)
 
-# Załaduj config per-user do sesji (tylko przy pierwszym uruchomieniu po logowaniu)
-if "config" not in st.session_state or st.session_state.get("config_user") != _uid:
-    st.session_state.config = load_config()
+    if _ud.get("openai_key"):
+        os.environ["OPENAI_API_KEY"] = _ud["openai_key"]
+
+    if _ud.get("gads_yaml"):
+        GADS_YAML_PATH.write_text(_ud["gads_yaml"], encoding="utf-8")
+        os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
+
+    if _ud.get("ga4_json"):
+        GA4_CREDS_PATH.write_text(_ud["ga4_json"], encoding="utf-8")
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
+
+    if _ud.get("config_json"):
+        try:
+            st.session_state.config = json.loads(_ud["config_json"])
+        except Exception:
+            pass
+
+    if "config" not in st.session_state:
+        st.session_state.config = load_config()
+
     st.session_state.config_user = _uid
+
+elif GA4_CREDS_PATH.exists():
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
 
 cfg: dict = st.session_state.config
 
@@ -1105,6 +1132,7 @@ def page_settings():
             val = openai_input.strip()
             if val.startswith("sk-"):
                 update_env_key("OPENAI_API_KEY", val)
+                auth.save_user_data(_uid, {"openai_key": val})
                 st.success("Klucz OpenAI zapisany.")
                 st.rerun()
             elif val == "":
@@ -1164,6 +1192,7 @@ def page_settings():
                         f"login_customer_id: {login_cid.strip().replace('-', '')}\n"
                     )
                     GADS_YAML_PATH.write_text(yaml_content, encoding="utf-8")
+                    auth.save_user_data(_uid, {"gads_yaml": yaml_content})
                     st.success("Konfiguracja Google Ads zapisana.")
                     st.rerun()
                 else:
@@ -1194,8 +1223,10 @@ def page_settings():
         ),
     )
     if uploaded is not None:
-        GA4_CREDS_PATH.write_bytes(uploaded.read())
+        content = uploaded.read()
+        GA4_CREDS_PATH.write_bytes(content)
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
+        auth.save_user_data(_uid, {"ga4_json": content.decode("utf-8")})
         st.success("Credentials GA4 zapisane. Status GA4 zmienił się na aktywny.")
         st.rerun()
 
@@ -1352,6 +1383,43 @@ def page_settings():
         else:
             st.warning("GA4 Service Account — brak")
             st.caption("Wgraj plik JSON w sekcji Google Analytics 4 powyżej.")
+
+    # ── Usuń konto (RODO) ─────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Dane osobowe i usunięcie konta")
+    st.caption(
+        "Zgodnie z RODO (art. 17) masz prawo do trwałego usunięcia swojego konta "
+        "i wszystkich powiązanych danych. Operacja jest nieodwracalna."
+    )
+    st.markdown("""
+**Jakie dane przechowujemy na Twoim koncie:**
+- Adres email (do logowania)
+- Klucz API OpenAI *(szyfrowany)*
+- Konfiguracja Google Ads *(szyfrowana)*
+- Credentials Google Analytics 4 *(szyfrowane)*
+- Lista klientów, ustawienia email i logo *(szyfrowane)*
+
+Dane przechowywane są w bazie Supabase (region EU) i szyfrowane algorytmem AES-128-CBC.
+    """)
+    with st.expander("Usuń konto trwale"):
+        st.warning("Ta operacja jest nieodwracalna. Wszystkie dane zostaną usunięte.")
+        with st.form("delete_account_form"):
+            confirm_email = st.text_input(
+                "Potwierdź swój adres email aby usunąć konto",
+                placeholder=st.session_state.get("user_email", ""),
+            )
+            if st.form_submit_button("Usuń konto i wszystkie dane", type="primary"):
+                if confirm_email.strip().lower() == (st.session_state.get("user_email") or "").lower():
+                    ok, msg = auth.delete_account(_uid)
+                    if ok:
+                        for key in list(st.session_state.keys()):
+                            del st.session_state[key]
+                        st.success("Konto zostało usunięte.")
+                        st.rerun()
+                    else:
+                        st.error(f"Błąd: {msg}")
+                else:
+                    st.error("Adres email nie zgadza się.")
 
 
 # ─── Strona: Pomoc / FAQ ──────────────────────────────────────────────────────
