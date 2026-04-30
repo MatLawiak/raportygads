@@ -1054,19 +1054,19 @@ def page_clients():
     with st.form("add_client_form", clear_on_submit=True):
         name = st.text_input(
             "Nazwa klienta *",
-            placeholder="np. Restauracja Biała Dama",
+            placeholder="np. Firma XYZ",
         )
         col1, col2 = st.columns(2)
         with col1:
             ads_id = st.text_input(
                 "Google Ads Customer ID",
-                placeholder="np. 8612470472",
+                placeholder="np. 1234567890",
                 help="ID konta bez myślników. Znajdziesz je w prawym górnym rogu panelu Google Ads.",
             )
         with col2:
             ga4_id = st.text_input(
                 "GA4 Property ID",
-                placeholder="np. 123456789",
+                placeholder="np. 987654321",
                 help="ID property w Google Analytics 4. Znajdziesz je w: Ustawienia → Informacje o usłudze.",
             )
 
