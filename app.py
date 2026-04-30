@@ -405,15 +405,16 @@ def _header_html(logo_b64: str, logo_mime: str, client_name: str, period: str, d
     logo_html = ""
     if logo_b64:
         logo_html = f'<img src="data:{logo_mime};base64,{logo_b64}" style="max-height:70px;margin-bottom:8px">'
-    return f"""
-    <div style="background:linear-gradient(135deg,{ACCENT2} 0%,{ACCENT} 100%);
-                padding:36px 32px;border-radius:12px;text-align:center;margin-bottom:24px">
-        {logo_html}
-        <h1 style="color:white;margin:0;font-size:2rem;font-weight:700">{client_name}</h1>
-        <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:1.1rem">
-            Raport miesięczny &nbsp;|&nbsp; {period}{(' &nbsp;|&nbsp; ' + date_range) if date_range else ''}
-        </p>
-    </div>"""
+    dr = f" &nbsp;|&nbsp; {date_range}" if date_range else ""
+    return (
+        f'<div style="background:linear-gradient(135deg,{ACCENT2} 0%,{ACCENT} 100%);'
+        f'padding:36px 32px;border-radius:12px;text-align:center;margin-bottom:24px">'
+        f'{logo_html}'
+        f'<h1 style="color:white;margin:0;font-size:2rem;font-weight:700">{client_name}</h1>'
+        f'<p style="color:rgba(255,255,255,0.85);margin:6px 0 0;font-size:1.1rem">'
+        f'Raport miesięczny &nbsp;|&nbsp; {period}{dr}'
+        f'</p></div>'
+    )
 
 
 def _kpi_card(label: str, value: str, sub: str = "") -> str:
