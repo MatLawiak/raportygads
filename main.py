@@ -377,13 +377,24 @@ Wyniki per kampania:
         g = ga4_data["general"]
         sources_table_md = _format_sources_table(ga4_data.get("sources", []))
         conv_events = ga4_data.get("conversion_events", [])
-        conv_lines = "\n".join(
-            f"  - {e['event']}: {e['conversions']} konwersji ({e['count']} zdarzeń)"
-            for e in conv_events
-        ) if conv_events else "  Brak zarejestrowanych konwersji."
         engagement = round(100 - g["bounce_rate_pct"], 1)
         dur = g["avg_session_duration_sec"]
         dur_label = f"{dur//60}m {dur%60}s"
+        # Konwersje tylko z liczbą > 0
+        nonzero_events = [e for e in conv_events if e.get("conversions", 0) > 0]
+        if nonzero_events:
+            conv_table_lines = [
+                "| Zdarzenie | Konwersje | Liczba zdarzeń |",
+                "|-----------|-----------|----------------|",
+            ]
+            for e in nonzero_events:
+                conv_table_lines.append(
+                    f"| {e['event']} | {e['conversions']} | {e['count']:,} |"
+                )
+            conv_table_md = "\n".join(conv_table_lines)
+        else:
+            conv_table_md = "Brak zarejestrowanych konwersji w tym okresie."
+
         ga4_section = f"""Użytkownicy: {g['users']:,}
 Sesje: {g['sessions']:,}
 Współczynnik odrzuceń: {g['bounce_rate_pct']}%
@@ -394,8 +405,8 @@ Konwersje GA4: {g.get('conversions', 0)}
 Źródła ruchu:
 {sources_table_md}
 
-Konwersje per zdarzenie (KLUCZOWE — uwzględnij w raporcie):
-{conv_lines}"""
+Konwersje per zdarzenie (TYLKO te z liczbą > 0; pomijaj zerowe):
+{conv_table_md}"""
         kpi_ga4_rows = (
             f"| Użytkownicy strony | {g['users']:,} |\n"
             f"| Sesje | {g['sessions']:,} |\n"
@@ -428,11 +439,40 @@ OKRES: {month_label}
 - Styl analityczny: opisuj działania, interpretuj wyniki, wyciągaj wnioski biznesowe odpowiednie dla branży klienta
 - Używaj **pogrubień** dla kluczowych liczb i wniosków
 - Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — w zależności od branży klienta) to najważniejszy wskaźnik — zawsze je wyróżniaj z konkretnymi liczbami
+- Każde zdarzenie konwersji wymienione w tabeli GA4 podaj z DOKŁADNĄ liczbą konwersji. Pomijaj zdarzenia z liczbą 0
 - Jeśli kampania była uruchomiona w trakcie miesiąca — zaznacz to (np. "kampania uruchomiona 13 marca")
 - Kampanie, które miały aktywność ale są wstrzymane — opisuj ich wyniki, NIE sugeruj zmian w nich
 - Jeśli coś spada — wyjaśnij możliwą przyczynę i co zostało zrobione w odpowiedzi
 - Jeśli coś rośnie — podkreśl co na to wpłynęło
 - Nie używaj emoji
+
+=== ZAKRES REKOMENDACJI (BARDZO WAŻNE — trzymaj się tego ściśle) ===
+Rekomendacje i plan działań MUSZĄ mieścić się WYŁĄCZNIE w obszarze kompetencji
+specjalisty Google Ads, SEO, UX i analityki internetowej. Dozwolone obszary:
+
+- **Google Ads** — zmiany budżetów, struktury kampanii, słów kluczowych,
+  wykluczeń, grup reklam, typów kampanii (Search/Performance Max/Demand Gen/
+  Display/Video), strategii ustalania stawek, dopasowań, list odbiorców
+  i remarketingu, treści reklam, rozszerzeń, harmonogramu emisji
+- **UX strony / landing page** — układ strony, widoczność CTA i numerów
+  telefonu, formularze (długość, pola), prędkość ładowania, wersja mobilna,
+  treść nagłówków, dowody społeczne, zdjęcia produktowe
+- **SEO** — treści blogowe, optymalizacja meta, struktura nagłówków, linkowanie
+  wewnętrzne, słowa kluczowe, optymalizacja techniczna
+- **Analityka** — śledzenie zdarzeń, atrybucja, konfiguracja konwersji,
+  spójność między Google Ads a GA4, raportowanie, integracje (np. CRM)
+- **Treści marketingowe** — opisy oferty, broszury, lead magnets, e-mail marketing
+
+ZABRONIONE OBSZARY (NIE wolno proponować):
+- HR / rekrutacja / zatrudnianie pracowników
+- Procesy operacyjne firmy / obsługa klienta poza UX strony
+- Logistyka / magazyn / dostawa
+- Polityka cenowa, oferta produktowa (chyba że na poziomie komunikatów reklamowych)
+- Strategia firmy, struktura organizacyjna, finanse
+
+Jeśli z danych wynika problem spoza tych obszarów (np. niska konwersja przy
+dużym ruchu może wskazywać na ofertę), opisz tylko co widać w danych — NIE
+proponuj rozwiązań spoza zakresu specjalisty marketingu cyfrowego.
 
 === FORMAT RAPORTU (trzymaj się go ściśle, NIE pomijaj żadnej sekcji ani tabeli) ===
 
@@ -488,15 +528,17 @@ def generate_report(prompt: str) -> str:
     client = OpenAI()  # używa zmiennej OPENAI_API_KEY
 
     system_prompt = (
-        "Jesteś doświadczonym specjalistą Google Ads i Analytics piszącym raport marketingowy. "
+        "Jesteś doświadczonym specjalistą Google Ads, SEO i Google Analytics piszącym raport marketingowy. "
         "Raporty piszesz po polsku, językiem analitycznym i profesjonalnym, zrozumiałym dla właściciela firmy bez wiedzy technicznej. "
         "DOSTOSOWUJESZ ton, terminologię, przykłady i interpretacje do branży klienta — zawsze opieraj się na sekcji PROFIL DZIAŁALNOŚCI w prompcie użytkownika. "
         "Nie używaj nazw branż ani przykładów spoza tego profilu (np. nie pisz o restauracji, jeśli klient jest e-commerce). "
-        "Styl wzorcowy: 'W marcu działania reklamowe zostały rozszerzone o nową kampanię. "
-        "Kampanie wygenerowały X kliknięć oraz Y konwersji przy współczynniku konwersji Z%.'. "
-        "Zawsze podajesz konkretne liczby. Interpretujesz dane biznesowo w kontekście branży klienta. "
+        "Zawsze podajesz konkretne liczby. Każdą konwersję z tabeli GA4 wymieniasz z dokładną liczbą. "
         "Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — zależnie od branży) to kluczowe wskaźniki — zawsze je wyróżniasz. "
-        "Formatujesz w Markdown z nagłówkami ## i **pogrubieniami**. Nie używasz emoji."
+        "ŚCIŚLE TRZYMASZ SIĘ ZAKRESU SPECJALISTY MARKETINGU CYFROWEGO: Google Ads, SEO, UX strony, analityka, treści reklamowe i landing page. "
+        "NIGDY nie proponujesz rozwiązań z obszaru HR (rekrutacja), operacji firmy, logistyki, polityki cenowej, struktury organizacyjnej. "
+        "Wszystkie rekomendacje muszą być wykonalne przez agencję marketingową lub specjalistę Google Ads. "
+        "Formatujesz w Markdown z nagłówkami ## i **pogrubieniami**. Nie używasz emoji. "
+        "Wstawiasz tabele DOKŁADNIE w takiej formie, w jakiej są podane w prompcie — nie konwertuj ich na bullet listy."
     )
 
     response = client.chat.completions.create(
