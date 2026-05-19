@@ -515,6 +515,79 @@ proponuj rozwiązań spoza zakresu specjalisty marketingu cyfrowego.
 """
 
 
+def build_weekly_prompt(
+    client_name: str,
+    period_label: str,
+    ads_data: dict,
+    ga4_data: dict,
+    business_profile: str = "",
+) -> str:
+    """Krótki, operacyjny raport tygodniowy. Konwersje TYLKO z GA4."""
+    profile_section = ""
+    if business_profile.strip():
+        profile_section = (
+            "\n=== PROFIL DZIAŁALNOŚCI KLIENTA (kluczowe — używaj jako kontekst) ===\n"
+            f"{business_profile.strip()}\n"
+        )
+
+    ads_section = "Brak danych Google Ads za ten tydzień."
+    if ads_data:
+        t = ads_data["totals"]
+        avg_cpc = round(t["cost_pln"] / t["clicks"], 2) if t["clicks"] else 0
+        table = _format_campaigns_table(ads_data.get("campaigns", []))
+        ads_section = (
+            f"Wydatki: {t['cost_pln']} zł | Kliknięcia: {t['clicks']:,} | "
+            f"Wyświetlenia: {t['impressions']:,}\n"
+            f"CTR: {t['ctr_pct']}% | Średni CPC: {avg_cpc} zł\n\n{table}"
+        )
+
+    ga4_section = "Brak danych GA4 za ten tydzień."
+    if ga4_data:
+        g = ga4_data["general"]
+        sources_table = _format_sources_table(ga4_data.get("sources", []))
+        events = [e for e in ga4_data.get("conversion_events", []) if e.get("conversions", 0) > 0]
+        if events:
+            conv_lines = "\n".join(f"  - {e['event']}: {e['conversions']}" for e in events)
+            conv_section = f"Konwersje w tym tygodniu (GA4):\n{conv_lines}"
+        else:
+            conv_section = "Brak zarejestrowanych konwersji."
+        ga4_section = (
+            f"Użytkownicy: {g['users']:,} | Sesje: {g['sessions']:,}\n"
+            f"{sources_table}\n\n{conv_section}"
+        )
+
+    return f"""Wygeneruj TYGODNIOWY raport marketingowy. To raport operacyjny — pisz zwięźle.
+
+KLIENT: {client_name}
+TYDZIEŃ: {period_label}
+{profile_section}
+=== GOOGLE ADS ===
+{ads_section}
+
+=== GOOGLE ANALYTICS 4 ===
+{ga4_section}
+
+=== ZASADY ===
+- DOSTOSUJ ton i interpretacje do branży klienta z PROFILU DZIAŁALNOŚCI powyżej. Nigdy nie zakładaj branży na podstawie nazw kampanii.
+- KONWERSJE: wyłącznie z GA4. Nigdy nie wspominaj konwersji ani kosztu konwersji z Google Ads.
+- Rekomendacje tylko z zakresu: Google Ads / SEO / UX / analityka.
+
+=== FORMAT (trzymaj się go ściśle) ===
+## Wyniki tygodnia — Google Ads
+(tabela z kluczowymi metrykami + 2 zdania komentarza dostosowane do branży)
+
+## Ruch na stronie — GA4
+(jeśli dane dostępne, inaczej napisz że brak danych; wymień konwersje z liczbami)
+
+## Co zwraca uwagę
+(maks. 3 punkty — tylko to co istotne dla tej branży)
+
+## Działania na przyszły tydzień
+(maks. 3 punkty — konkretne, krótkie, adekwatne do branży)
+
+Pisz po polsku. Prosto, bez żargonu. Maksymalnie 350 słów łącznie."""
+
+
 def generate_report(prompt: str) -> str:
     """
     Generuje raport przy użyciu OpenAI API (gpt-4o-mini).

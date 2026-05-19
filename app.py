@@ -17,6 +17,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 import streamlit as st
 import auth
+from report_html import report_to_html as _report_to_html
 
 # ─── Ścieżki ──────────────────────────────────────────────────────────────────
 
@@ -298,67 +299,7 @@ def get_last_full_week() -> tuple[str, str]:
     return str(last_monday), str(last_sunday)
 
 
-def build_weekly_prompt(
-    client_name: str,
-    period_label: str,
-    ads_data: dict,
-    ga4_data: dict,
-    business_profile: str = "",
-) -> str:
-    from main import _format_campaigns_table, _format_sources_table
-
-    profile_section = ""
-    if business_profile.strip():
-        profile_section = (
-            "\n=== PROFIL DZIAŁALNOŚCI KLIENTA (kluczowe — używaj jako kontekst) ===\n"
-            f"{business_profile.strip()}\n"
-        )
-
-    ads_section = "Brak danych Google Ads za ten tydzień."
-    if ads_data:
-        t = ads_data["totals"]
-        table = _format_campaigns_table(ads_data.get("campaigns", []))
-        ads_section = (
-            f"Wydatki: {t['cost_pln']} zł | Kliknięcia: {t['clicks']} | "
-            f"Wyświetlenia: {t['impressions']}\n"
-            f"CTR: {t['ctr_pct']}% | Konwersje: {t['conversions']} | "
-            f"Koszt/konw.: {t['cost_per_conversion_pln']} zł\n\n{table}"
-        )
-
-    ga4_section = "Brak danych GA4 za ten tydzień."
-    if ga4_data:
-        g = ga4_data["general"]
-        table = _format_sources_table(ga4_data.get("sources", []))
-        ga4_section = f"Użytkownicy: {g['users']} | Sesje: {g['sessions']}\n{table}"
-
-    return f"""Wygeneruj TYGODNIOWY raport marketingowy. To raport operacyjny — pisz zwięźle.
-
-KLIENT: {client_name}
-TYDZIEŃ: {period_label}
-{profile_section}
-=== GOOGLE ADS ===
-{ads_section}
-
-=== GOOGLE ANALYTICS 4 ===
-{ga4_section}
-
-=== ZASADY ===
-- DOSTOSUJ ton i interpretacje do branży klienta z PROFILU DZIAŁALNOŚCI powyżej. Nigdy nie zakładaj branży na podstawie nazw kampanii.
-
-=== FORMAT (trzymaj się go ściśle) ===
-## Wyniki tygodnia — Google Ads
-(tabela z kluczowymi metrykami + 2 zdania komentarza dostosowane do branży)
-
-## Ruch na stronie — GA4
-(jeśli dane dostępne, inaczej napisz że brak danych)
-
-## Co zwraca uwagę
-(maks. 3 punkty — tylko to co istotne dla tej branży)
-
-## Działania na przyszły tydzień
-(maks. 3 punkty — konkretne, krótkie, adekwatne do branży)
-
-Pisz po polsku. Prosto, bez żargonu. Maksymalnie 350 słów łącznie."""
+# build_weekly_prompt przeniesiono do main.py (współdzielone z weekly_sender.py)
 
 
 def _ensure_gads_yaml() -> bool:
@@ -414,6 +355,7 @@ def generate_full_report(
         fetch_google_ads_data,
         fetch_ga4_data,
         build_report_prompt,
+        build_weekly_prompt,
         generate_report,
     )
 
@@ -861,240 +803,9 @@ def render_visual_report(
                 st.plotly_chart(fig, use_container_width=True)
 
 
-# ─── HTML export ─────────────────────────────────────────────────────────────
+# ─── HTML export — przeniesione do report_html.py ────────────────────────────
 
-def _kpi_card_html(label: str, value: str) -> str:
-    return (
-        f'<div class="kpi-card">'
-        f'<div class="kpi-label">{label}</div>'
-        f'<div class="kpi-value">{value}</div>'
-        f'</div>'
-    )
-
-
-def _build_charts_html(ads_data: dict, ga4_data: dict) -> str:
-    """Generuje sekcję z KPI + interaktywnymi wykresami Plotly do osadzenia w HTML."""
-    import plotly.graph_objects as go
-    import plotly.io as pio
-
-    PLOT_CONFIG = {"displayModeBar": False, "responsive": True}
-    PLOT_LAYOUT = dict(
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=dict(family="Arial, Helvetica, sans-serif", color="#333"),
-    )
-
-    sections = []
-
-    # ── KPI summary ─────────────────────────────────────────────────────────
-    kpis = []
-    if ads_data:
-        t = ads_data["totals"]
-        avg_cpc = round(t["cost_pln"] / t["clicks"], 2) if t["clicks"] else 0
-        kpis += [
-            ("Wydatki Google Ads", f"{t['cost_pln']} zł"),
-            ("Wyświetlenia", f"{t['impressions']:,}"),
-            ("Kliknięcia", f"{t['clicks']:,}"),
-            ("CTR", f"{t['ctr_pct']}%"),
-            ("Średni CPC", f"{avg_cpc} zł"),
-        ]
-    if ga4_data:
-        g = ga4_data["general"]
-        dur = g["avg_session_duration_sec"]
-        ga4_conv = sum(int(e.get("conversions", 0)) for e in ga4_data.get("conversion_events", []))
-        kpis += [
-            ("Użytkownicy strony", f"{g['users']:,}"),
-            ("Sesje", f"{g['sessions']:,}"),
-            ("Śr. czas wizyty", f"{dur//60}m {dur%60}s"),
-            ("Wsp. zaangażowania", f"{round(100 - g['bounce_rate_pct'], 1)}%"),
-            ("Konwersje GA4", f"{ga4_conv}"),
-        ]
-    if kpis:
-        cards = "".join(_kpi_card_html(l, v) for l, v in kpis)
-        sections.append(f'<div class="kpi-grid">{cards}</div>')
-
-    # ── Wykres: Koszt vs kliknięcia per kampania ───────────────────────────
-    if ads_data:
-        campaigns = ads_data.get("campaigns", [])
-        if campaigns:
-            names = [c["name"] for c in campaigns]
-            fig = go.Figure(data=[
-                go.Bar(name="Koszt (zł)", x=names, y=[c["cost_pln"] for c in campaigns],
-                       marker_color="#1A3A5C"),
-                go.Bar(name="Kliknięcia", x=names, y=[c["clicks"] for c in campaigns],
-                       marker_color="#E8630A", yaxis="y2"),
-            ])
-            fig.update_layout(
-                title="Efektywność kampanii: koszt vs kliknięcia",
-                barmode="group",
-                xaxis=dict(tickangle=-20),
-                yaxis=dict(title="Koszt (zł)"),
-                yaxis2=dict(title="Kliknięcia", overlaying="y", side="right"),
-                height=400, margin=dict(t=50, b=80, l=60, r=60),
-                **PLOT_LAYOUT,
-            )
-            sections.append('<h2>Wyniki kampanii Google Ads</h2>')
-            sections.append(pio.to_html(fig, include_plotlyjs="cdn", full_html=False, config=PLOT_CONFIG))
-
-    # ── Wykres: Źródła ruchu (donut) ───────────────────────────────────────
-    if ga4_data:
-        sources = ga4_data.get("sources", [])
-        if sources:
-            fig = go.Figure(go.Pie(
-                labels=[s["channel"] for s in sources],
-                values=[s["sessions"] for s in sources],
-                hole=0.45,
-                textinfo="label+percent",
-                marker=dict(colors=["#E8630A", "#1A3A5C", "#F0A868", "#2E6EA6",
-                                    "#A8D8EA", "#E8A0BF", "#B5EAD7", "#FFDAC1"]),
-            ))
-            fig.update_layout(
-                title="Źródła ruchu na stronie (sesje)",
-                height=420, margin=dict(t=50, b=20, l=20, r=20),
-                **PLOT_LAYOUT,
-            )
-            sections.append('<h2>Źródła ruchu</h2>')
-            sections.append(pio.to_html(fig, include_plotlyjs=False, full_html=False, config=PLOT_CONFIG))
-
-    # ── Wykres: Konwersje GA4 per zdarzenie ────────────────────────────────
-    if ga4_data:
-        events = [e for e in ga4_data.get("conversion_events", []) if e.get("conversions", 0) > 0]
-        if events:
-            top_ev = events[:12]
-            fig = go.Figure(go.Bar(
-                x=[e["conversions"] for e in top_ev],
-                y=[e["event"] for e in top_ev],
-                orientation="h",
-                marker_color="#E8630A",
-                text=[str(int(e["conversions"])) for e in top_ev],
-                textposition="outside",
-            ))
-            fig.update_layout(
-                title="Konwersje na stronie (GA4) — wg zdarzenia",
-                height=max(280, 35 * len(top_ev) + 80),
-                margin=dict(t=50, b=20, l=200, r=60),
-                xaxis=dict(showgrid=False),
-                yaxis=dict(autorange="reversed"),
-                **PLOT_LAYOUT,
-            )
-            sections.append('<h2>Konwersje na stronie</h2>')
-            sections.append(pio.to_html(fig, include_plotlyjs=False, full_html=False, config=PLOT_CONFIG))
-
-    return "\n".join(sections)
-
-
-def _report_to_html(
-    client_name: str,
-    period_label: str,
-    report_text: str,
-    ads_data: dict = None,
-    ga4_data: dict = None,
-    logo_b64: str = "",
-    logo_mime: str = "image/png",
-) -> str:
-    try:
-        import markdown as _md
-        body_html = _md.markdown(report_text, extensions=["tables", "fenced_code"])
-    except ImportError:
-        import html
-        body_html = "<pre>" + html.escape(report_text) + "</pre>"
-
-    charts_html = _build_charts_html(ads_data or {}, ga4_data or {})
-    logo_html = ""
-    if logo_b64:
-        logo_html = (
-            f'<img src="data:{logo_mime};base64,{logo_b64}" '
-            f'style="max-height:80px;margin-bottom:14px;background:white;'
-            f'padding:6px 10px;border-radius:6px">'
-        )
-
-    return f"""<!DOCTYPE html>
-<html lang="pl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Raport — {client_name} — {period_label}</title>
-<style>
-  body {{
-    font-family: Arial, Helvetica, sans-serif;
-    max-width: 980px;
-    margin: 40px auto;
-    padding: 0 20px;
-    color: #333;
-    line-height: 1.65;
-  }}
-  h1, h2, h3 {{ color: #1A3A5C; }}
-  h2 {{
-    border-bottom: 3px solid #E8630A;
-    padding-bottom: 6px;
-    margin-top: 36px;
-  }}
-  table {{
-    border-collapse: collapse;
-    width: 100%;
-    margin: 16px 0;
-    font-size: 0.9rem;
-  }}
-  th {{
-    background: #1A3A5C;
-    color: white;
-    padding: 10px 14px;
-    text-align: left;
-  }}
-  td {{ padding: 8px 14px; border-bottom: 1px solid #eee; }}
-  tr:nth-child(even) td {{ background: #F5F5F5; }}
-  .report-header {{
-    background: linear-gradient(135deg, #1A3A5C 0%, #E8630A 100%);
-    color: white;
-    padding: 36px 32px;
-    border-radius: 12px;
-    text-align: center;
-    margin-bottom: 32px;
-  }}
-  .report-header h1 {{ color: white; margin: 0; font-size: 2rem; }}
-  .report-header p {{ color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 1.1rem; }}
-  .kpi-grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 12px;
-    margin: 24px 0 8px;
-  }}
-  .kpi-card {{
-    background: #FFF8F3;
-    border-left: 4px solid #E8630A;
-    border-radius: 8px;
-    padding: 14px 18px;
-    text-align: center;
-  }}
-  .kpi-label {{
-    font-size: 0.75rem;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 4px;
-  }}
-  .kpi-value {{
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #1A3A5C;
-  }}
-  @media print {{
-    body {{ margin: 20px; max-width: none; }}
-    .report-header {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-    .kpi-card {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-  }}
-</style>
-</head>
-<body>
-<div class="report-header">
-  {logo_html}
-  <h1>{client_name}</h1>
-  <p>Raport marketingowy &nbsp;|&nbsp; {period_label}</p>
-</div>
-{charts_html}
-{body_html}
-</body>
-</html>"""
+# Wszystkie funkcje HTML zostały przeniesione do report_html.py — importowane na górze pliku.
 
 
 # ─── Edytor wniosków i rekomendacji ──────────────────────────────────────────
@@ -1835,6 +1546,53 @@ def page_settings():
                     st.success("Połączenie SMTP działa poprawnie.")
                 except Exception as e:
                     st.error(f"Błąd połączenia: {e}")
+
+    # ── Automatyczna wysyłka tygodniowa ───────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Automatyczna wysyłka tygodniowa")
+    st.caption(
+        "Po włączeniu — w każdy poniedziałek rano serwer automatycznie wygeneruje "
+        "raport tygodniowy (dane z poprzedniego pełnego tygodnia, pon–niedz) "
+        "dla każdego Twojego klienta i wyśle go emailem na adresy z listy odbiorców powyżej."
+    )
+
+    smtp_ready = bool(cfg["email"].get("smtp_user") and cfg["email"].get("smtp_password"))
+    recipients_ready = bool(cfg["email"].get("recipients"))
+    clients_ready = bool(cfg.get("clients"))
+
+    if not (smtp_ready and recipients_ready and clients_ready):
+        missing = []
+        if not smtp_ready:      missing.append("konfiguracja SMTP")
+        if not recipients_ready: missing.append("odbiorcy")
+        if not clients_ready:    missing.append("klienci")
+        st.warning(
+            f"Aby włączyć automatyczną wysyłkę, najpierw uzupełnij: **{', '.join(missing)}**."
+        )
+
+    current_auto = cfg.get("auto_send_weekly", False)
+    new_auto = st.toggle(
+        "Wysyłaj raporty tygodniowe automatycznie (poniedziałki rano)",
+        value=current_auto,
+        disabled=not (smtp_ready and recipients_ready and clients_ready),
+        help=(
+            "Skrypt cron sprawdza tę flagę co poniedziałek. "
+            "Jeśli włączona — generuje raporty dla wszystkich Twoich klientów "
+            "i wysyła na każdy adres z listy odbiorców."
+        ),
+    )
+    if new_auto != current_auto:
+        cfg["auto_send_weekly"] = new_auto
+        save_config(cfg)
+        if new_auto:
+            st.success("Automatyczna wysyłka tygodniowa włączona.")
+        else:
+            st.info("Automatyczna wysyłka tygodniowa wyłączona.")
+
+    if cfg.get("auto_send_weekly"):
+        st.info(
+            f"✅ Aktywne — w każdy poniedziałek raporty trafią na: "
+            f"**{', '.join(cfg['email'].get('recipients', []))}**"
+        )
 
     # ── Status API ────────────────────────────────────────────────────────────
     st.markdown("---")
