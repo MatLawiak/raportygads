@@ -361,6 +361,48 @@ TYDZIEŃ: {period_label}
 Pisz po polsku. Prosto, bez żargonu. Maksymalnie 350 słów łącznie."""
 
 
+def _ensure_gads_yaml() -> bool:
+    """
+    Gwarantuje, że per-user plik google-ads.yaml istnieje na dysku
+    i że env var wskazuje na niego. Jeśli plik nie istnieje, odzyskuje
+    go z Supabase. Zwraca True jeśli gotowy do użycia.
+    """
+    if GADS_YAML_PATH.exists():
+        os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
+        return True
+    uid = st.session_state.get("user_id")
+    if not uid:
+        return False
+    try:
+        ud = auth.load_user_data(uid)
+        if ud.get("gads_yaml"):
+            GADS_YAML_PATH.write_text(ud["gads_yaml"], encoding="utf-8")
+            os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _ensure_ga4_creds() -> bool:
+    """To samo dla pliku Service Account GA4."""
+    if GA4_CREDS_PATH.exists():
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
+        return True
+    uid = st.session_state.get("user_id")
+    if not uid:
+        return False
+    try:
+        ud = auth.load_user_data(uid)
+        if ud.get("ga4_json"):
+            GA4_CREDS_PATH.write_text(ud["ga4_json"], encoding="utf-8")
+            os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def generate_full_report(
     client: dict,
     report_type: str,
@@ -379,19 +421,28 @@ def generate_full_report(
     ga4_data: dict = {}
 
     if client.get("ads_customer_id"):
-        try:
-            # Wskaż per-user plik konfiguracyjny Google Ads
-            if GADS_YAML_PATH.exists():
-                os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
-            ads_data = fetch_google_ads_data(client["ads_customer_id"], date_from, date_to)
-        except Exception as e:
-            st.warning(f"Google Ads: nie udało się pobrać danych — {e}")
+        if not _ensure_gads_yaml():
+            st.warning(
+                "Google Ads: brak pliku google-ads.yaml. "
+                "Wgraj go w **Ustawienia → Google Ads**."
+            )
+        else:
+            try:
+                ads_data = fetch_google_ads_data(client["ads_customer_id"], date_from, date_to)
+            except Exception as e:
+                st.warning(f"Google Ads: nie udało się pobrać danych — {e}")
 
     if client.get("ga4_property_id"):
-        try:
-            ga4_data = fetch_ga4_data(client["ga4_property_id"], date_from, date_to)
-        except Exception as e:
-            st.warning(f"GA4: nie udało się pobrać danych — {e}")
+        if not _ensure_ga4_creds():
+            st.warning(
+                "GA4: brak pliku credentials. "
+                "Wgraj go w **Ustawienia → Google Analytics 4**."
+            )
+        else:
+            try:
+                ga4_data = fetch_ga4_data(client["ga4_property_id"], date_from, date_to)
+            except Exception as e:
+                st.warning(f"GA4: nie udało się pobrać danych — {e}")
 
     business_profile = client.get("business_profile", "")
 
@@ -1586,7 +1637,13 @@ def page_settings():
         help="Plik pobierasz z panelu Google Ads lub generujesz przez google-ads-python.",
     )
     if uploaded_yaml is not None:
-        GADS_YAML_PATH.write_bytes(uploaded_yaml.read())
+        content = uploaded_yaml.read()
+        GADS_YAML_PATH.write_bytes(content)
+        os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
+        try:
+            auth.save_user_data(_uid, {"gads_yaml": content.decode("utf-8")})
+        except Exception as exc:
+            st.warning(f"Plik zapisany lokalnie, ale błąd zapisu do Supabase: {exc}")
         st.success("Plik google-ads.yaml zapisany.")
         st.rerun()
 
