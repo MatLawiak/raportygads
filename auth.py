@@ -163,7 +163,7 @@ def save_user_data(user_id: str, fields: dict) -> bool:
 def load_user_data(user_id: str) -> dict:
     """
     Wczytuje i odszyfrowuje dane użytkownika.
-    Zwraca dict z kluczami: openai_key, gads_yaml, ga4_json, config_json.
+    Zwraca dict z kluczami: openai_key, gads_yaml, ga4_json, config_json, meta_token.
     """
     if not _use_supabase():
         return {}
@@ -174,7 +174,7 @@ def load_user_data(user_id: str) -> dict:
         row = res.data[0]
         return {
             field: _decrypt(row.get(field, "") or "")
-            for field in ("openai_key", "gads_yaml", "ga4_json", "config_json")
+            for field in ("openai_key", "gads_yaml", "ga4_json", "config_json", "meta_token")
         }
     except Exception:
         return {}
