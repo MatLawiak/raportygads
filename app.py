@@ -130,36 +130,133 @@ def show_landing() -> None:
     st.markdown("""
     <style>
         [data-testid="stSidebar"] { display: none !important; }
-        .block-container { padding-top: 0 !important; max-width: 860px; }
+        .block-container { padding-top: 0 !important; max-width: 980px; }
+        .feature-card {
+            background:#fff;
+            border-radius:14px;
+            padding:24px 22px;
+            height:200px;
+            box-shadow:0 2px 12px rgba(0,0,0,0.06);
+            border-top:3px solid var(--card-accent, #E8630A);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .feature-card:hover {
+            transform: translateY(-3px);
+            box-shadow:0 8px 20px rgba(0,0,0,0.10);
+        }
+        .feature-icon {
+            font-size:1.8rem;
+            line-height:1;
+            margin-bottom:10px;
+        }
+        .source-badge {
+            display:inline-block;
+            background:rgba(255,255,255,0.18);
+            color:white;
+            padding:5px 12px;
+            border-radius:20px;
+            font-size:0.8rem;
+            margin:0 4px;
+            font-weight:600;
+        }
+        .step-row {
+            display:flex;
+            align-items:center;
+            gap:14px;
+            margin:14px 0;
+        }
+        .step-num {
+            min-width:34px;
+            height:34px;
+            border-radius:50%;
+            background:#1A3A5C;
+            color:white;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            font-weight:700;
+            font-size:0.95rem;
+        }
     </style>""", unsafe_allow_html=True)
 
     st.markdown(f"""
     <div style="background:linear-gradient(135deg,{ACCENT2_L} 0%,{ACCENT_L} 100%);
-                padding:56px 40px 48px;border-radius:0 0 20px 20px;text-align:center;margin-bottom:32px">
-        <p style="color:rgba(255,255,255,0.75);font-size:0.9rem;margin:0 0 10px;letter-spacing:.1em;text-transform:uppercase">
+                padding:60px 40px 52px;border-radius:0 0 24px 24px;text-align:center;margin-bottom:36px">
+        <p style="color:rgba(255,255,255,0.8);font-size:0.85rem;margin:0 0 14px;letter-spacing:.15em;text-transform:uppercase;font-weight:600">
             Generator Raportów Marketingowych
         </p>
-        <h1 style="color:white;margin:0;font-size:2.4rem;font-weight:800;line-height:1.2">
-            Raporty Google Ads + GA4<br>gotowe w 30 sekund
+        <h1 style="color:white;margin:0;font-size:2.6rem;font-weight:800;line-height:1.15">
+            Raporty z 3 platform<br>gotowe w 30 sekund
         </h1>
-        <p style="color:rgba(255,255,255,0.82);margin:18px 0 0;font-size:1.05rem;max-width:540px;margin-left:auto;margin-right:auto">
-            Podłącz swoje konto reklamowe i stronę internetową — aplikacja automatycznie pobierze dane
-            i wygeneruje profesjonalny raport miesięczny lub tygodniowy.
+        <div style="margin:22px 0 14px">
+            <span class="source-badge">Google Ads</span>
+            <span class="source-badge">Meta Ads</span>
+            <span class="source-badge">Google Analytics 4</span>
+        </div>
+        <p style="color:rgba(255,255,255,0.85);margin:18px auto 0;font-size:1.05rem;max-width:580px;line-height:1.5">
+            Podłącz konta reklamowe i analitykę — aplikacja pobierze dane, porówna kanały
+            i wygeneruje profesjonalny raport z analizą wykonaną przez AI.
         </p>
     </div>""", unsafe_allow_html=True)
 
-    # Features
+    # Features — 3 źródła danych
     c1, c2, c3 = st.columns(3)
-    for col, icon, title, desc in [
-        (c1, "📈", "Google Ads", "Kampanie, kliknięcia, konwersje, CPC, CTR — wszystko w jednym miejscu."),
-        (c2, "🔍", "Google Analytics 4", "Ruch na stronie, źródła, zaangażowanie i konwersje GA4."),
-        (c3, "📧", "Wysyłka emailem", "Raport trafia automatycznie do skrzynki klienta po wygenerowaniu."),
+    for col, icon, title, desc, accent in [
+        (c1, "📈", "Google Ads",
+         "Kampanie, kliknięcia, CTR, średni CPC, wydatki — pełne dane z Search, Performance Max i Display.",
+         "#4285F4"),
+        (c2, "📱", "Meta Ads",
+         "Wyniki kampanii Facebook i Instagram. Liczba leadów z formularzy błyskawicznych i koszt pozyskania (CPL).",
+         "#0866FF"),
+        (c3, "🔍", "Google Analytics 4",
+         "Ruch na stronie, źródła wizyt, czas wizyty, zaangażowanie i konwersje GA4.",
+         "#F9AB00"),
     ]:
         col.markdown(f"""
-        <div style="background:#F9F9F9;border-radius:12px;padding:24px 20px;text-align:center;height:160px">
-            <div style="font-size:2rem">{icon}</div>
-            <p style="font-weight:700;color:{ACCENT2_L};margin:8px 0 6px">{title}</p>
-            <p style="color:#666;font-size:0.85rem;margin:0">{desc}</p>
+        <div class="feature-card" style="--card-accent:{accent}">
+            <div class="feature-icon">{icon}</div>
+            <p style="font-weight:700;color:{ACCENT2_L};margin:6px 0 8px;font-size:1.1rem">{title}</p>
+            <p style="color:#555;font-size:0.88rem;margin:0;line-height:1.5">{desc}</p>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+
+    # AI + sposób działania
+    cc1, cc2 = st.columns([1, 1])
+    with cc1:
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#FFF8F3 0%,#FFE8D6 100%);
+                    border-radius:14px;padding:28px 24px;height:240px;
+                    border-left:4px solid {ACCENT_L}">
+            <div style="font-size:1.6rem;margin-bottom:6px">🤖</div>
+            <p style="font-weight:700;color:{ACCENT2_L};font-size:1.15rem;margin:8px 0 10px">
+                Analiza wykonana przez AI
+            </p>
+            <p style="color:#444;font-size:0.92rem;margin:0;line-height:1.55">
+                AI porównuje skuteczność Google Ads i Meta Ads, łączy je z danymi GA4,
+                wyciąga wnioski i rekomenduje działania — w języku zrozumiałym dla właściciela firmy.
+            </p>
+        </div>""", unsafe_allow_html=True)
+
+    with cc2:
+        st.markdown(f"""
+        <div style="background:#fff;border-radius:14px;padding:24px 24px;height:240px;
+                    box-shadow:0 2px 12px rgba(0,0,0,0.06)">
+            <p style="font-weight:700;color:{ACCENT2_L};font-size:1.05rem;margin:0 0 10px">
+                Jak to działa
+            </p>
+            <div class="step-row">
+                <div class="step-num">1</div>
+                <div style="color:#444;font-size:0.9rem">Podłącz konta API (Google Ads, Meta, GA4)</div>
+            </div>
+            <div class="step-row">
+                <div class="step-num">2</div>
+                <div style="color:#444;font-size:0.9rem">Wybierz klienta i okres raportu</div>
+            </div>
+            <div class="step-row">
+                <div class="step-num">3</div>
+                <div style="color:#444;font-size:0.9rem">Pobierz raport (.md/.html) lub wyślij emailem</div>
+            </div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -231,6 +328,9 @@ if st.session_state.get("config_user") != _uid:
     if _ud.get("openai_key"):
         os.environ["OPENAI_API_KEY"] = _ud["openai_key"]
 
+    if _ud.get("meta_token"):
+        os.environ["META_ACCESS_TOKEN"] = _ud["meta_token"]
+
     if _ud.get("gads_yaml"):
         GADS_YAML_PATH.write_text(_ud["gads_yaml"], encoding="utf-8")
         os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
@@ -273,10 +373,13 @@ with st.sidebar:
     gads_ok   = GADS_YAML_PATH.exists()
     ga4_ok    = GA4_CREDS_PATH.exists()
 
+    meta_ok = bool(os.environ.get("META_ACCESS_TOKEN"))
+
     st.caption("Status API")
     st.write("🟢 OpenAI" if openai_ok else "🔴 OpenAI — brak klucza")
     st.write("🟢 Google Ads" if gads_ok else "🔴 Google Ads — brak pliku")
     st.write("🟢 GA4" if ga4_ok else "🟡 GA4 — brak credentials")
+    st.write("🟢 Meta Ads" if meta_ok else "🟡 Meta Ads — brak tokenu")
 
     st.markdown("<br>" * 6, unsafe_allow_html=True)
     st.markdown("---")
@@ -350,7 +453,7 @@ def generate_full_report(
     date_from: str,
     date_to: str,
     period_label: str,
-) -> tuple[str, str, dict, dict]:
+) -> tuple[str, str, dict, dict, dict | None]:
     from main import (
         fetch_google_ads_data,
         fetch_ga4_data,
@@ -388,10 +491,24 @@ def generate_full_report(
 
     business_profile = client.get("business_profile", "")
 
+    meta_data: dict | None = None
+    meta_token = os.environ.get("META_ACCESS_TOKEN")
+    meta_account_id = client.get("meta_ad_account_id", "").strip()
+    if meta_token and meta_account_id:
+        try:
+            from meta_ads import fetch_meta_campaign_data
+            meta_campaign_ids = client.get("meta_campaign_ids") or None
+            meta_data = fetch_meta_campaign_data(
+                meta_account_id, date_from, date_to, meta_token,
+                campaign_ids=meta_campaign_ids,
+            )
+        except Exception as e:
+            st.warning(f"Meta Ads: nie udało się pobrać danych — {e}")
+
     if report_type == "Tygodniowy":
         prompt = build_weekly_prompt(client["name"], period_label, ads_data, ga4_data, business_profile)
     else:
-        prompt = build_report_prompt(client["name"], period_label, ads_data, ga4_data, business_profile)
+        prompt = build_report_prompt(client["name"], period_label, ads_data, ga4_data, business_profile, meta_data=meta_data)
 
     report_text = generate_report(prompt)
 
@@ -401,7 +518,7 @@ def generate_full_report(
     path = REPORTS_DIR / filename
     path.write_text(report_text, encoding="utf-8")
 
-    return report_text, filename, ads_data, ga4_data
+    return report_text, filename, ads_data, ga4_data, meta_data
 
 
 # ─── Helpers wizualne ────────────────────────────────────────────────────────
@@ -485,18 +602,27 @@ def render_visual_report(
     report_text: str,
     logo_b64: str = "",
     logo_mime: str = "image/png",
+    meta_data: dict | None = None,
 ) -> None:
     import plotly.graph_objects as go
     import plotly.express as px
 
-    # Fallback do globalnego loga użytkownika jeśli klient nie ma własnego
     if not logo_b64:
         logo_b64 = cfg.get("logo_b64", "")
         logo_mime = cfg.get("logo_mime", "image/png")
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "Strona tytułowa", "Google Ads", "Google Analytics", "Podsumowanie", "Wnioski i rekomendacje"
-    ])
+    tab_labels = ["Strona tytułowa", "Google Ads", "Google Analytics"]
+    if meta_data:
+        tab_labels.append("Meta Ads")
+    tab_labels += ["Podsumowanie", "Wnioski i rekomendacje"]
+
+    tabs = st.tabs(tab_labels)
+    tab1 = tabs[0]
+    tab2 = tabs[1]
+    tab3 = tabs[2]
+    tab_meta = tabs[3] if meta_data else None
+    tab4 = tabs[4] if meta_data else tabs[3]
+    tab5 = tabs[5] if meta_data else tabs[4]
 
     # ══════════════════════════════════════════════════════
     # TAB 1 — STRONA TYTUŁOWA
@@ -705,6 +831,64 @@ def render_visual_report(
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Brak danych Google Analytics 4 za ten okres.")
+
+    # ══════════════════════════════════════════════════════
+    # TAB META ADS (opcjonalny)
+    # ══════════════════════════════════════════════════════
+    if tab_meta is not None and meta_data:
+        with tab_meta:
+            st.markdown(_header_html(logo_b64, logo_mime, client_name, period_label), unsafe_allow_html=True)
+
+            lt = meta_data.get("lead_totals", {})
+            ot = meta_data.get("other_totals", {})
+            lead_camps = meta_data.get("lead_campaigns", [])
+            other_camps = meta_data.get("other_campaigns", [])
+
+            if lt.get("leads") or lt.get("spend"):
+                _section_title("Kampanie Lead Ads — formularze błyskawiczne")
+                c1, c2, c3 = st.columns(3)
+                c1.markdown(_kpi_card("Leady łącznie", str(lt.get("leads", 0))), unsafe_allow_html=True)
+                c2.markdown(_kpi_card("Koszt pozyskania leadu", f"{lt.get('cpl', 0)} zł"), unsafe_allow_html=True)
+                c3.markdown(_kpi_card("Wydatki Lead Ads", f"{lt.get('spend', 0)} zł"), unsafe_allow_html=True)
+
+                if lead_camps:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if len(lead_camps) > 1:
+                        fig = go.Figure(go.Bar(
+                            x=[c["name"] for c in lead_camps],
+                            y=[c["leads"] for c in lead_camps],
+                            marker_color=ACCENT,
+                            text=[f"{c['leads']} leadów<br>CPL: {c['cpl']} zł" for c in lead_camps],
+                            textposition="outside",
+                        ))
+                        fig.update_layout(
+                            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                            margin=dict(t=10, b=20, l=10, r=10), height=300,
+                            xaxis=dict(tickangle=-20), yaxis=dict(showgrid=False, visible=False),
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+
+                    _plotly_table(
+                        ["Kampania", "Leady", "Wydatki (zł)", "CPL (zł)"],
+                        [[c["name"], c["leads"], c["spend"], c["cpl"]] for c in lead_camps],
+                    )
+
+            if other_camps:
+                st.markdown("<br>", unsafe_allow_html=True)
+                _section_title("Pozostałe kampanie Meta")
+                cols = st.columns(3)
+                cols[0].markdown(_kpi_card("Wydatki", f"{ot.get('spend', 0)} zł"), unsafe_allow_html=True)
+                cols[1].markdown(_kpi_card("Wyświetlenia", f"{ot.get('impressions', 0):,}"), unsafe_allow_html=True)
+                cols[2].markdown(_kpi_card("Kliknięcia", f"{ot.get('clicks', 0):,}"), unsafe_allow_html=True)
+                st.markdown("<br>", unsafe_allow_html=True)
+                _plotly_table(
+                    ["Kampania", "Wydatki (zł)", "Wyświetlenia", "Kliknięcia", "CTR%"],
+                    [[c["name"], c["spend"], f"{c['impressions']:,}", f"{c['clicks']:,}", c["ctr_pct"]]
+                     for c in other_camps],
+                )
+
+            if not lead_camps and not other_camps:
+                st.info("Brak danych Meta Ads za ten okres.")
 
     # ══════════════════════════════════════════════════════
     # TAB 4 — PODSUMOWANIE
@@ -1007,9 +1191,9 @@ def page_generate():
         if not os.environ.get("OPENAI_API_KEY"):
             st.error("Brak klucza OpenAI. Przejdź do **Ustawienia** i dodaj swój klucz API OpenAI.")
         else:
-            with st.spinner("Pobieranie danych z Google Ads i GA4..."):
+            with st.spinner("Pobieranie danych z Google Ads, GA4 i Meta Ads..."):
                 try:
-                    report_text, filename, ads_data, ga4_data = generate_full_report(
+                    report_text, filename, ads_data, ga4_data, meta_data = generate_full_report(
                         selected_client, report_type, date_from, date_to, period_label
                     )
                     st.session_state.report_text = report_text
@@ -1017,6 +1201,7 @@ def page_generate():
                     st.session_state.report_client = selected_name
                     st.session_state.report_ads_data = ads_data
                     st.session_state.report_ga4_data = ga4_data
+                    st.session_state.report_meta_data = meta_data
                     st.session_state.report_period = period_label
                     st.session_state.report_logo_b64 = (
                         selected_client.get("logo_b64") or cfg.get("logo_b64", "")
@@ -1091,6 +1276,7 @@ def page_generate():
             st.session_state.report_text,
             st.session_state.get("report_logo_b64", ""),
             st.session_state.get("report_logo_mime", "image/png"),
+            st.session_state.get("report_meta_data"),
         )
 
         render_recommendations_editor(st.session_state.report_text)
@@ -1098,18 +1284,146 @@ def page_generate():
 
 # ─── Strona: Klienci ──────────────────────────────────────────────────────────
 
+def _render_meta_campaign_assignment(clients: list) -> None:
+    """Dedykowana sekcja do przypisywania kampanii Meta do klientów."""
+    meta_token = os.environ.get("META_ACCESS_TOKEN")
+    if not meta_token:
+        return
+    if not clients:
+        return
+
+    # Zbierz unikalne konta reklamowe ze wszystkich klientów
+    accounts = {}
+    for c in clients:
+        aid = c.get("meta_ad_account_id", "").strip()
+        if aid:
+            accounts[aid] = accounts.get(aid, []) + [c["name"]]
+
+    if not accounts:
+        return
+
+    st.markdown("---")
+    st.subheader("Kampanie Meta Ads — przypisanie do klientów")
+    st.caption(
+        "Pobierz kampanie z konta reklamowego i przypisz każdą do właściwego klienta. "
+        "Tylko przypisane kampanie trafiają do raportu."
+    )
+
+    # Wybór konta jeśli jest kilka
+    all_accounts = list(accounts.keys())
+    if len(all_accounts) > 1:
+        selected_account = st.selectbox(
+            "Konto reklamowe Meta",
+            all_accounts,
+            format_func=lambda a: f"{a}  (klienci: {', '.join(accounts[a])})",
+            key="meta_assign_account",
+        )
+    else:
+        selected_account = all_accounts[0]
+        st.caption(f"Konto: **{selected_account}**")
+
+    col_fetch, col_clear = st.columns([2, 1])
+    with col_fetch:
+        if st.button("Pobierz kampanie z Meta", key="meta_fetch_assign", type="primary", use_container_width=True):
+            with st.spinner("Pobieranie kampanii..."):
+                try:
+                    from meta_ads import list_meta_campaigns
+                    camps = list_meta_campaigns(selected_account, meta_token)
+                    st.session_state["meta_assign_campaigns"] = camps
+                    st.session_state["meta_assign_account_id"] = selected_account
+                    st.success(f"Pobrano {len(camps)} kampanii.")
+                except Exception as e:
+                    st.error(f"Błąd: {e}")
+
+    with col_clear:
+        if st.button("Wyczyść", key="meta_clear_assign", use_container_width=True):
+            st.session_state.pop("meta_assign_campaigns", None)
+            st.rerun()
+
+    camps: list = st.session_state.get("meta_assign_campaigns", [])
+    if not camps:
+        return
+
+    # Buduj mapę: campaign_id → które klienty go mają w meta_campaign_ids
+    client_names = ["— nie przypisuj —"] + [c["name"] for c in clients]
+
+    def _current_client_for(campaign_id: str) -> str:
+        for c in clients:
+            if campaign_id in (c.get("meta_campaign_ids") or []):
+                return c["name"]
+        return "— nie przypisuj —"
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Nagłówek tabeli
+    h1, h2, h3, h4 = st.columns([3, 2, 2, 2])
+    h1.markdown("**Kampania**")
+    h2.markdown("**Cel kampanii**")
+    h3.markdown("**Status**")
+    h4.markdown("**Przypisz do klienta**")
+    st.markdown("<hr style='margin:4px 0 8px'>", unsafe_allow_html=True)
+
+    selections: dict[str, str] = {}  # campaign_id → client_name
+    for camp in camps:
+        c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
+        c1.write(camp.get("name", ""))
+        obj = camp.get("objective", "").replace("_", " ").title()
+        c2.caption(obj)
+        status = camp.get("status", "")
+        status_color = "🟢" if status == "ACTIVE" else "⚪"
+        c3.caption(f"{status_color} {status}")
+        current = _current_client_for(camp["id"])
+        selected = c4.selectbox(
+            "",
+            client_names,
+            index=client_names.index(current) if current in client_names else 0,
+            key=f"meta_assign_{camp['id']}",
+            label_visibility="collapsed",
+        )
+        selections[camp["id"]] = selected
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Zapisz przypisania", key="meta_save_assign", type="primary", use_container_width=True):
+        # Wyczyść stare przypisania z tego konta dla wszystkich klientów
+        fetched_ids = {c["id"] for c in camps}
+        for ci, client in enumerate(cfg["clients"]):
+            old_ids = client.get("meta_campaign_ids") or []
+            cfg["clients"][ci]["meta_campaign_ids"] = [
+                cid for cid in old_ids if cid not in fetched_ids
+            ]
+
+        # Dodaj nowe przypisania
+        for camp_id, client_name in selections.items():
+            if client_name == "— nie przypisuj —":
+                continue
+            for ci, client in enumerate(cfg["clients"]):
+                if client["name"] == client_name:
+                    ids = cfg["clients"][ci].get("meta_campaign_ids") or []
+                    if camp_id not in ids:
+                        ids.append(camp_id)
+                    cfg["clients"][ci]["meta_campaign_ids"] = ids
+
+        save_config(cfg)
+        # Podsumowanie
+        assigned = sum(1 for v in selections.values() if v != "— nie przypisuj —")
+        st.success(f"Zapisano. Przypisano {assigned} kampanii do klientów.")
+        st.rerun()
+
+
 def page_clients():
     st.markdown('<p class="main-title">Klienci</p>', unsafe_allow_html=True)
     st.markdown('<p class="page-subtitle">Zarządzaj kontami klientów — Google Ads i Google Analytics 4.</p>', unsafe_allow_html=True)
 
     clients = cfg.get("clients", [])
 
+    _render_meta_campaign_assignment(clients)
+
     if "saved_client" not in st.session_state:
         st.session_state.saved_client = None
 
     if clients:
         import base64
-        st.subheader("Zapisane konta")
+        st.subheader("Konta klientów")
         for i, client in enumerate(clients):
             with st.expander(f"**{client['name']}**"):
                 # ── Logo klienta (poza formularzem — auto-zapis) ──────────
@@ -1168,6 +1482,13 @@ def page_clients():
                             value=client.get("ga4_property_id", ""),
                             key=f"ga4_e_{i}",
                         )
+                    meta_account_edit = st.text_input(
+                        "Meta Ads — ID konta reklamowego",
+                        value=client.get("meta_ad_account_id", ""),
+                        key=f"meta_acc_e_{i}",
+                        placeholder="act_123456789",
+                        help="ID konta reklamowego Meta w formacie act_XXXXXXXXX. Znajdziesz je w Ads Manager → górny pasek.",
+                    )
                     profile_edit = st.text_area(
                         "Profil działalności",
                         value=client.get("business_profile", ""),
@@ -1194,11 +1515,22 @@ def page_clients():
                         "name": name_edit.strip(),
                         "ads_customer_id": ads_edit.strip(),
                         "ga4_property_id": ga4_edit.strip(),
+                        "meta_ad_account_id": meta_account_edit.strip(),
                         "business_profile": profile_edit.strip(),
                     })
                     save_config(cfg)
                     st.session_state.saved_client = name_edit.strip()
                     st.rerun()
+
+                # Status przypisanych kampanii Meta
+                meta_count = len(client.get("meta_campaign_ids") or [])
+                meta_id = client.get("meta_ad_account_id", "").strip()
+                if meta_id and meta_count:
+                    st.caption(f"Meta Ads: {meta_count} kampanii przypisanych — zarządzaj w sekcji powyżej.")
+                elif meta_id and not meta_count:
+                    st.caption("Meta Ads: konto ustawione, brak przypisanych kampanii — użyj sekcji powyżej.")
+                elif not meta_id:
+                    st.caption("Meta Ads: brak ID konta reklamowego.")
 
                 if deleted:
                     cfg["clients"].pop(i)
@@ -1232,6 +1564,11 @@ def page_clients():
                 placeholder="np. 987654321",
                 help="ID property w Google Analytics 4. Znajdziesz je w: Ustawienia → Informacje o usłudze.",
             )
+        meta_id = st.text_input(
+            "Meta Ads — ID konta reklamowego (opcjonalnie)",
+            placeholder="act_123456789",
+            help="Format: act_XXXXXXXXX. Znajdziesz je w Ads Manager → górny pasek lub URL.",
+        )
         profile = st.text_area(
             "Profil działalności",
             height=120,
@@ -1263,6 +1600,7 @@ def page_clients():
                     "name": name.strip(),
                     "ads_customer_id": ads_id.strip(),
                     "ga4_property_id": ga4_id.strip(),
+                    "meta_ad_account_id": meta_id.strip(),
                     "business_profile": profile.strip(),
                 }
                 if new_logo is not None:
@@ -1327,6 +1665,37 @@ def page_settings():
                 st.error("Wpisz klucz API.")
             else:
                 st.error("Klucz powinien zaczynać się od 'sk-'.")
+
+    # ── Meta Ads ──────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Meta Ads — token dostępu")
+    st.caption(
+        "System User Token z Meta Business Manager. "
+        "Wymagane uprawnienie: `ads_read`. "
+        "Wygeneruj go w: Business Settings → System Users → Generuj token."
+    )
+
+    current_meta_token = os.environ.get("META_ACCESS_TOKEN", "")
+    with st.form("meta_token_form"):
+        meta_token_input = st.text_input(
+            "Token dostępu Meta",
+            value=current_meta_token,
+            type="password",
+            placeholder="EAABwzLixnjY...",
+        )
+        if st.form_submit_button("Zapisz token Meta", type="primary"):
+            val = meta_token_input.strip()
+            if val:
+                update_env_key("META_ACCESS_TOKEN", val)
+                auth.save_user_data(_uid, {"meta_token": val})
+                os.environ["META_ACCESS_TOKEN"] = val
+                st.success("Token Meta zapisany.")
+                st.rerun()
+            else:
+                st.error("Wpisz token.")
+
+    if current_meta_token:
+        st.success("Token Meta ustawiony.")
 
     # ── Google Ads ────────────────────────────────────────────────────────────
     st.markdown("---")
@@ -1813,6 +2182,64 @@ Wystarczy, że dla każdego nowego klienta dodasz email konta usługi jako Czyte
 3. Rola: **Czytelnik** → zapisz
 
 Email konta usługi znajdziesz w pobranym pliku JSON pod kluczem `client_email`.
+        """)
+
+    # ── Meta Ads ──────────────────────────────────────────────────────────────
+    with st.expander("Meta Ads — token dostępu (jak go wygenerować?)", expanded=False):
+        st.markdown("""
+**Do czego służy:** Aplikacja pobiera dane z kampanii Meta Ads Manager — wyniki kampanii,
+liczbę leadów z formularzy błyskawicznych i koszt pozyskania leadu (CPL).
+
+---
+
+**Krok 1 — Utwórz aplikację Meta**
+
+1. Wejdź na **developers.facebook.com** → **My Apps → Create App**
+2. Podaj nazwę aplikacji, np. *Raporty*
+3. W kroku **Use cases** wybierz wyłącznie: **Measure ad performance data with Marketing API**
+4. Przypisz swój Business Manager i kliknij **Create app**
+
+---
+
+**Krok 2 — Utwórz System Usera**
+
+1. Wejdź do **business.facebook.com → Ustawienia → Użytkownicy → Użytkownicy systemowi**
+2. Kliknij **+ Dodaj** → nadaj nazwę (np. *Raporty API*) → rola: **Employee** → zapisz
+
+---
+
+**Krok 3 — Przypisz konto reklamowe**
+
+1. Kliknij utworzonego System Usera
+2. Kliknij **Przypisz zasoby** → wybierz typ **Konta reklamowe**
+3. Zaznacz konta reklamowe klientów których chcesz raportować
+4. Uprawnienie: **Wyświetl wyniki** (tylko odczyt) → **Przypisz zasoby**
+
+---
+
+**Krok 4 — Wygeneruj token**
+
+1. Kliknij **Wygeneruj token** (przycisk przy System Userze)
+2. Wybierz aplikację *Raporty* z listy
+3. Zaznacz uprawnienie **ads_read**
+4. Kliknij **Generuj token** → skopiuj
+
+> Token ważny jest 60 dni. Wygeneruj nowy przed upłynięciem terminu.
+
+---
+
+**Krok 5 — Wklej token w aplikacji**
+
+Przejdź do **Ustawienia → Meta Ads → Token dostępu Meta** i wklej skopiowany token.
+
+---
+
+**Krok 6 — Dodaj ID konta reklamowego dla klienta**
+
+W sekcji **Klienci** przy danym kliencie:
+- Wpisz **ID konta reklamowego** w formacie `act_123456789`
+- ID znajdziesz w Ads Manager — górny pasek lub URL strony (liczba po `act_`)
+- Kliknij **Pobierz listę kampanii** i zaznacz kampanie do raportu
         """)
 
     # ── SMTP Email ───────────────────────────────────────────────────────────

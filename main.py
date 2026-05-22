@@ -14,6 +14,8 @@ import json
 from datetime import date
 from pathlib import Path
 
+CONFIG_PATH = Path(__file__).parent / "config.json"
+
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -45,6 +47,31 @@ def get_last_full_week() -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 # Krok 1 — Weryfikacja kont
 # ---------------------------------------------------------------------------
+
+def load_client_meta_config(client_name: str) -> dict | None:
+    """
+    Zwraca {"ad_account_id": "act_...", "access_token": "..."} dla klienta,
+    jeśli ma skonfigurowane Meta Ads w config.json i token w zmiennych środowiskowych.
+    """
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    for client in cfg.get("clients", []):
+        if client_name.lower() in client.get("name", "").lower():
+            ad_account_id = client.get("meta_ad_account_id")
+            if not ad_account_id:
+                return None
+            token_env = client.get("meta_access_token_env", "META_ACCESS_TOKEN")
+            token = os.environ.get(token_env)
+            if not token:
+                print(f"⚠️  Brak tokenu Meta ({token_env}) — pomijam Meta Ads.")
+                return None
+            return {"ad_account_id": ad_account_id, "access_token": token}
+
+    return None
+
 
 def verify_google_ads_account(client_name: str) -> dict | None:
     """
@@ -309,6 +336,34 @@ def _format_campaigns_table(campaigns: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_meta_lead_table(campaigns: list[dict]) -> str:
+    if not campaigns:
+        return "Brak kampanii Lead Ads w tym okresie."
+    lines = [
+        "| Kampania | Leady | Wydatki (zł) | CPL (zł) |",
+        "|----------|-------|--------------|----------|",
+    ]
+    for c in campaigns:
+        lines.append(
+            f"| {c['name']} | {c['leads']} | {c['spend']} | {c['cpl']} |"
+        )
+    return "\n".join(lines)
+
+
+def _format_meta_other_table(campaigns: list[dict]) -> str:
+    if not campaigns:
+        return "Brak innych kampanii Meta w tym okresie."
+    lines = [
+        "| Kampania | Wydatki (zł) | Wyświetlenia | Kliknięcia | CTR% |",
+        "|----------|--------------|-------------|------------|------|",
+    ]
+    for c in campaigns:
+        lines.append(
+            f"| {c['name']} | {c['spend']} | {c['impressions']:,} | {c['clicks']:,} | {c['ctr_pct']} |"
+        )
+    return "\n".join(lines)
+
+
 def _format_sources_table(sources: list[dict]) -> str:
     if not sources:
         return "Brak danych o źródłach ruchu."
@@ -329,6 +384,7 @@ def build_report_prompt(
     ads_data: dict,
     ga4_data: dict,
     business_profile: str = "",
+    meta_data: dict | None = None,
 ) -> str:
     """Buduje prompt użytkownika do generowania raportu."""
 
@@ -411,11 +467,45 @@ Konwersje per zdarzenie (TYLKO te z liczbą > 0; pomijaj zerowe):
             f"| Konwersje GA4 | {g.get('conversions', 0)} |\n"
         )
 
+    # --- Sekcja Meta Ads ---
+    meta_section = ""
+    kpi_meta_rows = ""
+    if meta_data:
+        lt = meta_data["lead_totals"]
+        ot = meta_data["other_totals"]
+        lead_table_md = _format_meta_lead_table(meta_data.get("lead_campaigns", []))
+        other_table_md = _format_meta_other_table(meta_data.get("other_campaigns", []))
+
+        meta_section = f"""Kampanie Lead Ads (formularz błyskawiczny):
+Leady łącznie: {lt['leads']}
+Wydatki Lead Ads: {lt['spend']} zł
+Koszt pozyskania leadu (CPL): {lt['cpl']} zł
+
+{lead_table_md}"""
+
+        if meta_data.get("other_campaigns"):
+            meta_section += f"""
+
+Pozostałe kampanie Meta:
+Wydatki: {ot['spend']} zł | Wyświetlenia: {ot['impressions']:,} | Kliknięcia: {ot['clicks']:,}
+
+{other_table_md}"""
+
+        kpi_meta_rows = (
+            f"| Leady Meta Ads (formularz) | {lt['leads']} |\n"
+            f"| CPL Meta Ads | {lt['cpl']} zł |\n"
+            f"| Wydatki Meta Ads łącznie | {round(lt['spend'] + ot['spend'], 2)} zł |\n"
+        )
+
     kpi_table_md = (
         "| Wskaźnik | Wartość |\n"
         "|----------|---------|\n"
-        f"{kpi_ads_rows}{kpi_ga4_rows}"
-    ) if (kpi_ads_rows or kpi_ga4_rows) else "_Brak danych do wygenerowania tabeli wskaźników._"
+        f"{kpi_ads_rows}{kpi_meta_rows}{kpi_ga4_rows}"
+    ) if (kpi_ads_rows or kpi_ga4_rows or kpi_meta_rows) else "_Brak danych do wygenerowania tabeli wskaźników._"
+
+    meta_prompt_block = ""
+    if meta_section:
+        meta_prompt_block = f"\n=== META ADS ===\n{meta_section}\n"
 
     return f"""Wygeneruj profesjonalny raport miesięczny na podstawie poniższych danych.
 
@@ -424,7 +514,7 @@ OKRES: {month_label}
 {profile_section}
 === GOOGLE ADS ===
 {ads_section}
-
+{meta_prompt_block}
 === GOOGLE ANALYTICS 4 ===
 {ga4_section}
 
@@ -433,7 +523,8 @@ OKRES: {month_label}
 - DOSTOSUJ ton, terminologię, przykłady i interpretacje do branży klienta opisanej w PROFILU DZIAŁALNOŚCI powyżej. Nigdy nie zakładaj branży na podstawie nazw kampanii — bazuj wyłącznie na profilu
 - Styl analityczny: opisuj działania, interpretuj wyniki, wyciągaj wnioski biznesowe odpowiednie dla branży klienta
 - Używaj **pogrubień** dla kluczowych liczb i wniosków
-- KONWERSJE: korzystamy WYŁĄCZNIE z danych GA4 (sekcja "Konwersje per zdarzenie"). NIE wymieniaj konwersji ani kosztu konwersji z Google Ads — te dane są niedostępne / niewiarygodne. Nie pisz "koszt konwersji X zł" ani "współczynnik konwersji X%" w odniesieniu do Google Ads. Jeśli musisz policzyć efektywność kampanii, opieraj się na CTR, średnim CPC i wydatkach — nie na konwersjach
+- KONWERSJE z Google Ads: NIE wymieniaj konwersji ani kosztu konwersji z Google Ads — te dane są niedostępne / niewiarygodne. Jeśli musisz policzyć efektywność kampanii Google Ads, opieraj się na CTR, średnim CPC i wydatkach
+- META ADS: Jeśli dostępna jest sekcja META ADS — zawsze opisz wyniki kampanii Lead Ads (liczba leadów, CPL) oraz pozostałych kampanii (wydatki, kliknięcia). Leady z formularza błyskawicznego to kluczowy wskaźnik Meta — traktuj je jak konwersje. Nie porównuj leadów Meta z konwersjami GA4 bezpośrednio — to różne kanały
 - Każde zdarzenie konwersji wymienione w tabeli GA4 podaj z DOKŁADNĄ liczbą konwersji. Pomijaj zdarzenia z liczbą 0
 - Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — w zależności od branży klienta) to najważniejszy wskaźnik — zawsze je wyróżniaj z konkretnymi liczbami z GA4
 - Jeśli kampania była uruchomiona w trakcie miesiąca — zaznacz to (np. "kampania uruchomiona 13 marca")
@@ -597,16 +688,21 @@ def generate_report(prompt: str) -> str:
     client = OpenAI()  # używa zmiennej OPENAI_API_KEY
 
     system_prompt = (
-        "Jesteś doświadczonym specjalistą Google Ads, SEO i Google Analytics piszącym raport marketingowy. "
+        "Jesteś doświadczonym specjalistą marketingu cyfrowego — Google Ads, Meta Ads, SEO i analityki internetowej — "
+        "piszącym raport marketingowy. "
         "Raporty piszesz po polsku, językiem analitycznym i profesjonalnym, zrozumiałym dla właściciela firmy bez wiedzy technicznej. "
-        "DOSTOSOWUJESZ ton, terminologię, przykłady i interpretacje do branży klienta — zawsze opieraj się na sekcji PROFIL DZIAŁALNOŚCI w prompcie użytkownika. "
-        "Nie używaj nazw branż ani przykładów spoza tego profilu (np. nie pisz o restauracji, jeśli klient jest e-commerce). "
+        "DOSTOSOWUJESZ ton, terminologię, przykłady i interpretacje do branży klienta — zawsze opieraj się na sekcji PROFIL DZIAŁALNOŚCI w prompcie. "
+        "Nie używaj nazw branż ani przykładów spoza tego profilu. "
         "Zawsze podajesz konkretne liczby. Każdą konwersję z tabeli GA4 wymieniasz z dokładną liczbą. "
-        "KONWERSJE BIERZESZ WYŁĄCZNIE Z GA4 — NIGDY nie wspominaj konwersji, kosztu konwersji ani współczynnika konwersji z Google Ads (są niewiarygodne / niedostępne w tym koncie). "
-        "Konwersje (formularze, kliknięcia w telefon, transakcje, zapisy — zależnie od branży) to kluczowe wskaźniki — zawsze je wyróżniasz w oparciu o dane GA4. "
-        "ŚCIŚLE TRZYMASZ SIĘ ZAKRESU SPECJALISTY MARKETINGU CYFROWEGO: Google Ads, SEO, UX strony, analityka, treści reklamowe i landing page. "
-        "NIGDY nie proponujesz rozwiązań z obszaru HR (rekrutacja), operacji firmy, logistyki, polityki cenowej, struktury organizacyjnej. "
-        "Wszystkie rekomendacje muszą być wykonalne przez agencję marketingową lub specjalistę Google Ads. "
+        "KONWERSJE Z GOOGLE ADS: NIGDY nie wspominaj konwersji ani kosztu konwersji z Google Ads (niedostępne w tym koncie). "
+        "META ADS: Jeśli w prompcie jest sekcja META ADS — traktujesz ją jako równorzędne źródło danych obok Google Ads. "
+        "Leady z Meta (formularz błyskawiczny) to kluczowy wskaźnik — zawsze je wyróżniasz z liczbą i CPL. "
+        "Gdy dostępne są dane z META ADS i GOOGLE ADS jednocześnie — porównujesz efektywność kanałów: "
+        "który generuje więcej leadów/konwersji, który ma lepszy koszt pozyskania, co to oznacza dla budżetu. "
+        "Gdy dostępne są META ADS, GOOGLE ADS i GA4 jednocześnie — szukasz powiązań: jak ruch z obu kanałów "
+        "przekłada się na sesje i konwersje GA4, jak kampanie się uzupełniają lub nakładają. "
+        "ŚCIŚLE TRZYMASZ SIĘ ZAKRESU SPECJALISTY MARKETINGU CYFROWEGO: Google Ads, Meta Ads, SEO, UX strony, analityka. "
+        "NIGDY nie proponujesz rozwiązań z obszaru HR, operacji firmy, logistyki, polityki cenowej, struktury organizacyjnej. "
         "Formatujesz w Markdown z nagłówkami ## i **pogrubieniami**. Nie używasz emoji. "
         "Wstawiasz tabele DOKŁADNIE w takiej formie, w jakiej są podane w prompcie — nie konwertuj ich na bullet listy."
     )
@@ -700,8 +796,26 @@ def run(client_name: str) -> None:
         except Exception as e:
             print(f"⚠️  Błąd pobierania danych GA4: {e}")
 
+    meta_data: dict | None = None
+    meta_cfg = load_client_meta_config(client_name)
+    if meta_cfg:
+        print("📡 Pobieranie danych Meta Ads...")
+        try:
+            from meta_ads import fetch_meta_campaign_data
+            meta_data = fetch_meta_campaign_data(
+                meta_cfg["ad_account_id"], date_from, date_to, meta_cfg["access_token"]
+            )
+            lt = meta_data["lead_totals"]
+            print(
+                f"   Leady: {lt['leads']}  |  "
+                f"CPL: {lt['cpl']} zł  |  "
+                f"Wydatki Lead Ads: {lt['spend']} zł"
+            )
+        except Exception as e:
+            print(f"⚠️  Błąd pobierania danych Meta Ads: {e}")
+
     # 4. Budowanie promptu
-    prompt = build_report_prompt(client_name, month_label, ads_data, ga4_data)
+    prompt = build_report_prompt(client_name, month_label, ads_data, ga4_data, meta_data=meta_data)
 
     # 5. Generowanie raportu
     print("🧠 Generowanie raportu przez Claude...")
