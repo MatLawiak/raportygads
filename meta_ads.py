@@ -10,6 +10,21 @@ import time
 import requests
 
 
+def list_meta_ad_accounts(access_token: str) -> list[dict]:
+    """
+    Zwraca listę dostępnych kont reklamowych dla danego tokenu.
+    Każdy element: {"id" (act_XXX), "account_id" (XXX), "name", "account_status"}
+    account_status: 1=ACTIVE, 2=DISABLED, 3=UNSETTLED, 7=PENDING_RISK_REVIEW, 9=IN_GRACE_PERIOD
+    """
+    url = "https://graph.facebook.com/v22.0/me/adaccounts"
+    params = {
+        "access_token": access_token,
+        "fields": "id,account_id,name,account_status",
+        "limit": 100,
+    }
+    return _fetch_all_pages(url, params)
+
+
 def list_meta_campaigns(ad_account_id: str, access_token: str) -> list[dict]:
     """
     Zwraca listę wszystkich kampanii na koncie reklamowym.

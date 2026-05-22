@@ -1284,6 +1284,123 @@ def page_generate():
 
 # ─── Strona: Klienci ──────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_meta_accounts_cached(token: str) -> list:
+    """Cache na 5 min — nie odpytujemy API przy każdym renderze."""
+    from meta_ads import list_meta_ad_accounts
+    return list_meta_ad_accounts(token)
+
+
+def _render_client_meta_section(i: int, client: dict) -> None:
+    """Sekcja Meta dla pojedynczego klienta — wybór konta + kampanii."""
+    st.markdown("**Meta Ads**")
+
+    meta_token = os.environ.get("META_ACCESS_TOKEN")
+    if not meta_token:
+        st.info(
+            "Aby skonfigurować Meta Ads dla tego klienta — wklej **System User Token** "
+            "w **Ustawienia → Meta Ads**."
+        )
+        return
+
+    # 1. Wybór konta reklamowego z listy
+    try:
+        accounts = _fetch_meta_accounts_cached(meta_token)
+    except Exception as e:
+        st.warning(f"Nie udało się pobrać listy kont reklamowych Meta: {e}")
+        # Awaryjnie — pole tekstowe
+        manual = st.text_input(
+            "Wpisz ID konta reklamowego ręcznie (act_XXXXXXXXX)",
+            value=client.get("meta_ad_account_id", ""),
+            key=f"meta_manual_{i}",
+        )
+        if st.button("Zapisz ID konta", key=f"meta_manual_save_{i}"):
+            cfg["clients"][i]["meta_ad_account_id"] = manual.strip()
+            save_config(cfg)
+            st.rerun()
+        return
+
+    if not accounts:
+        st.warning(
+            "System User nie ma przypisanych kont reklamowych. "
+            "Wejdź w Business Manager → Użytkownicy systemowi → wybierz usera → Przypisz zasoby → Konta reklamowe."
+        )
+        return
+
+    options = {"— nie powiązuj —": ""}
+    for acc in accounts:
+        status_label = {1: "🟢", 2: "🔴", 3: "🟡", 7: "🟠", 9: "🟡"}.get(
+            acc.get("account_status", 0), "⚪"
+        )
+        label = f"{status_label} {acc.get('name', '?')}  ({acc.get('id', '')})"
+        options[label] = acc.get("id", "")
+
+    current_id = client.get("meta_ad_account_id", "").strip()
+    current_label = next((lbl for lbl, val in options.items() if val == current_id), "— nie powiązuj —")
+
+    selected_label = st.selectbox(
+        "Konto reklamowe Meta",
+        list(options.keys()),
+        index=list(options.keys()).index(current_label),
+        key=f"meta_acc_sel_{i}",
+        help="Lista kont reklamowych przypisanych do System Usera w Business Manager.",
+    )
+    selected_id = options[selected_label]
+
+    if selected_id != current_id:
+        if st.button("Zapisz konto reklamowe", key=f"meta_acc_save_{i}", type="primary"):
+            cfg["clients"][i]["meta_ad_account_id"] = selected_id
+            # Wyczyść stare kampanie — należą do innego konta
+            cfg["clients"][i]["meta_campaign_ids"] = []
+            save_config(cfg)
+            st.session_state.pop(f"meta_campaigns_for_{i}", None)
+            st.rerun()
+        return
+
+    if not selected_id:
+        return  # nie ma co wybierać kampanii dopóki konto nie jest zapisane
+
+    # 2. Wybór kampanii
+    st.markdown("&nbsp;", unsafe_allow_html=True)
+    saved_ids: list = client.get("meta_campaign_ids") or []
+    st.caption(f"Aktualnie wybrane: **{len(saved_ids)}** kampanii do raportu.")
+
+    fetch_key = f"meta_campaigns_for_{i}"
+    if st.button("Pobierz kampanie z tego konta", key=f"fetch_meta_camps_{i}"):
+        try:
+            from meta_ads import list_meta_campaigns
+            with st.spinner("Pobieranie kampanii..."):
+                st.session_state[fetch_key] = list_meta_campaigns(selected_id, meta_token)
+        except Exception as e:
+            st.error(f"Błąd: {e}")
+
+    camps = st.session_state.get(fetch_key, [])
+    if camps:
+        camp_options = {}
+        for c in camps:
+            status_icon = "🟢" if c.get("status") == "ACTIVE" else "⚪"
+            label = f"{status_icon} {c.get('name', '?')}"
+            camp_options[label] = c["id"]
+
+        default_labels = [lbl for lbl, cid in camp_options.items() if cid in saved_ids]
+
+        selected_labels = st.multiselect(
+            "Kampanie uwzględnione w raporcie",
+            options=list(camp_options.keys()),
+            default=default_labels,
+            key=f"meta_camp_sel_{i}",
+            help="Tylko zaznaczone kampanie trafią do raportu tego klienta.",
+        )
+
+        if st.button("Zapisz wybór kampanii", key=f"save_meta_camps_{i}", type="primary"):
+            cfg["clients"][i]["meta_campaign_ids"] = [
+                camp_options[lbl] for lbl in selected_labels
+            ]
+            save_config(cfg)
+            st.success(f"Zapisano {len(selected_labels)} kampanii.")
+            st.rerun()
+
+
 def _render_meta_campaign_assignment(clients: list) -> None:
     """Dedykowana sekcja do przypisywania kampanii Meta do klientów."""
     meta_token = os.environ.get("META_ACCESS_TOKEN")
@@ -1300,6 +1417,12 @@ def _render_meta_campaign_assignment(clients: list) -> None:
             accounts[aid] = accounts.get(aid, []) + [c["name"]]
 
     if not accounts:
+        st.markdown("---")
+        st.subheader("Kampanie Meta Ads — przypisanie do klientów")
+        st.info(
+            "Aby zarządzać kampaniami Meta — najpierw wybierz konto reklamowe dla "
+            "przynajmniej jednego klienta (sekcja **Meta Ads** w karcie klienta poniżej)."
+        )
         return
 
     st.markdown("---")
@@ -1482,13 +1605,6 @@ def page_clients():
                             value=client.get("ga4_property_id", ""),
                             key=f"ga4_e_{i}",
                         )
-                    meta_account_edit = st.text_input(
-                        "Meta Ads — ID konta reklamowego",
-                        value=client.get("meta_ad_account_id", ""),
-                        key=f"meta_acc_e_{i}",
-                        placeholder="act_123456789",
-                        help="ID konta reklamowego Meta w formacie act_XXXXXXXXX. Znajdziesz je w Ads Manager → górny pasek.",
-                    )
                     profile_edit = st.text_area(
                         "Profil działalności",
                         value=client.get("business_profile", ""),
@@ -1515,22 +1631,15 @@ def page_clients():
                         "name": name_edit.strip(),
                         "ads_customer_id": ads_edit.strip(),
                         "ga4_property_id": ga4_edit.strip(),
-                        "meta_ad_account_id": meta_account_edit.strip(),
                         "business_profile": profile_edit.strip(),
                     })
                     save_config(cfg)
                     st.session_state.saved_client = name_edit.strip()
                     st.rerun()
 
-                # Status przypisanych kampanii Meta
-                meta_count = len(client.get("meta_campaign_ids") or [])
-                meta_id = client.get("meta_ad_account_id", "").strip()
-                if meta_id and meta_count:
-                    st.caption(f"Meta Ads: {meta_count} kampanii przypisanych — zarządzaj w sekcji powyżej.")
-                elif meta_id and not meta_count:
-                    st.caption("Meta Ads: konto ustawione, brak przypisanych kampanii — użyj sekcji powyżej.")
-                elif not meta_id:
-                    st.caption("Meta Ads: brak ID konta reklamowego.")
+                # ── Meta Ads — konto + kampanie (poza formą, interaktywne) ────
+                st.markdown("---")
+                _render_client_meta_section(i, client)
 
                 if deleted:
                     cfg["clients"].pop(i)
@@ -1564,11 +1673,37 @@ def page_clients():
                 placeholder="np. 987654321",
                 help="ID property w Google Analytics 4. Znajdziesz je w: Ustawienia → Informacje o usłudze.",
             )
-        meta_id = st.text_input(
-            "Meta Ads — ID konta reklamowego (opcjonalnie)",
-            placeholder="act_123456789",
-            help="Format: act_XXXXXXXXX. Znajdziesz je w Ads Manager → górny pasek lub URL.",
-        )
+        # Meta Ads — selectbox z listy kont jeśli token jest, inaczej text input
+        meta_token_new = os.environ.get("META_ACCESS_TOKEN")
+        meta_id = ""
+        if meta_token_new:
+            try:
+                meta_accs = _fetch_meta_accounts_cached(meta_token_new)
+            except Exception:
+                meta_accs = []
+            if meta_accs:
+                meta_opts = {"— pomiń (skonfigurujesz później) —": ""}
+                for acc in meta_accs:
+                    status_label = {1: "🟢", 2: "🔴", 3: "🟡"}.get(
+                        acc.get("account_status", 0), "⚪"
+                    )
+                    label = f"{status_label} {acc.get('name', '?')}  ({acc.get('id', '')})"
+                    meta_opts[label] = acc.get("id", "")
+                meta_choice = st.selectbox(
+                    "Meta Ads — konto reklamowe (opcjonalnie)",
+                    list(meta_opts.keys()),
+                    help="Po dodaniu klienta będziesz mógł wybrać kampanie do raportu.",
+                )
+                meta_id = meta_opts[meta_choice]
+            else:
+                meta_id = st.text_input(
+                    "Meta Ads — ID konta reklamowego (opcjonalnie)",
+                    placeholder="act_123456789",
+                    help="Brak dostępnych kont — wpisz ID ręcznie lub przypisz konto do System Usera.",
+                )
+        else:
+            st.caption("Aby skonfigurować Meta Ads dla nowego klienta — najpierw dodaj token w Ustawieniach.")
+
         profile = st.text_area(
             "Profil działalności",
             height=120,
