@@ -2,12 +2,19 @@
 Pobieranie danych kampanii z Meta Marketing API.
 
 Logika rozróżniania kampanii:
-- objective == LEAD_GENERATION  →  formularz błyskawiczny: zwraca leads + CPL + spend
-- pozostałe cele               →  standardowe: spend, impressions, clicks, CTR
+- cele lead-genowe (LEAD_GENERATION / OUTCOME_LEADS)
+  lub kampanie z faktycznymi leadami → formularz błyskawiczny: leads + CPL + spend
+- pozostałe cele → standardowe: spend, impressions, clicks, CTR
 """
 
 import time
 import requests
+
+# Cele kampanii klasyfikowane jako lead-generation
+LEAD_OBJECTIVES = {"LEAD_GENERATION", "OUTCOME_LEADS"}
+
+# Action types, które liczymy jako pozyskany lead (formularz błyskawiczny)
+LEAD_ACTION_TYPES = {"lead", "onsite_conversion.lead_grouped"}
 
 
 def list_meta_ad_accounts(access_token: str) -> list[dict]:
@@ -81,12 +88,21 @@ def fetch_meta_campaign_data(
     for c in campaigns_raw:
         spend = float(c.get("spend", 0))
         name = c.get("campaign_name", "")
+        objective = c.get("objective", "")
+        actions = c.get("actions", [])
+        leads = _sum_action_values(actions, LEAD_ACTION_TYPES)
 
-        if c.get("objective") == "LEAD_GENERATION":
-            leads = _extract_action_value(c.get("actions", []), "lead")
-            cpl = _extract_action_value(c.get("cost_per_action_type", []), "lead", as_float=True)
+        # Kampania jest klasyfikowana jako lead-generation jeśli:
+        # - ma cel lead-genowy (LEAD_GENERATION / OUTCOME_LEADS)
+        # - lub faktycznie pozyskała leady (action_type: lead)
+        is_lead_campaign = objective in LEAD_OBJECTIVES or leads > 0
+
+        if is_lead_campaign:
+            cpl = _sum_action_values(
+                c.get("cost_per_action_type", []), LEAD_ACTION_TYPES, as_float=True
+            )
             if not cpl and leads:
-                cpl = round(spend / leads, 2)
+                cpl = spend / leads
             lead_campaigns.append({
                 "name": name,
                 "leads": leads,
@@ -99,7 +115,8 @@ def fetch_meta_campaign_data(
                 "spend": round(spend, 2),
                 "impressions": int(c.get("impressions", 0)),
                 "clicks": int(c.get("clicks", 0)),
-                "ctr_pct": round(float(c.get("ctr", 0)) * 100, 2),
+                # Meta API zwraca CTR już w procentach — NIE mnożymy przez 100
+                "ctr_pct": round(float(c.get("ctr", 0)), 2),
             })
 
     lead_totals = {
@@ -162,3 +179,15 @@ def _extract_action_value(actions: list, action_type: str, as_float: bool = Fals
         if a.get("action_type") == action_type:
             return float(a["value"]) if as_float else int(a["value"])
     return 0.0 if as_float else 0
+
+
+def _sum_action_values(actions: list, action_types: set, as_float: bool = False):
+    """Sumuje wartości dla wszystkich pasujących action_type (np. lead + onsite_conversion.lead_grouped)."""
+    total = 0.0
+    for a in actions:
+        if a.get("action_type") in action_types:
+            try:
+                total += float(a.get("value", 0))
+            except (TypeError, ValueError):
+                continue
+    return total if as_float else int(total)
