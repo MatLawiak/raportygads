@@ -1291,6 +1291,13 @@ def _fetch_meta_accounts_cached(token: str) -> list:
     return list_meta_ad_accounts(token)
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_meta_campaigns_cached(account_id: str, token: str) -> list:
+    """Cache na 5 min — kampanie pobierane reaktywnie po wyborze konta."""
+    from meta_ads import list_meta_campaigns
+    return list_meta_campaigns(account_id, token)
+
+
 def _render_client_meta_section(i: int, client: dict) -> None:
     """Sekcja Meta dla pojedynczego klienta — wybór konta + kampanii."""
     st.markdown("**Meta Ads**")
@@ -1655,6 +1662,79 @@ def page_clients():
     st.markdown("---")
     st.subheader("Dodaj nowego klienta")
 
+    # ── Meta Ads — POZA formą, żeby selectbox + multiselect były reaktywne ──
+    meta_token_new = os.environ.get("META_ACCESS_TOKEN")
+    new_meta_account_id = ""
+    new_meta_campaign_ids: list[str] = []
+
+    st.markdown("**Meta Ads (opcjonalnie)**")
+    if not meta_token_new:
+        st.caption(
+            "Aby przypisać konto i kampanie Meta przy dodawaniu klienta — "
+            "najpierw dodaj token w **Ustawienia → Meta Ads**."
+        )
+    else:
+        try:
+            new_meta_accs = _fetch_meta_accounts_cached(meta_token_new)
+        except Exception as e:
+            st.warning(f"Nie udało się pobrać listy kont Meta: {e}")
+            new_meta_accs = []
+
+        if not new_meta_accs:
+            new_meta_account_id = st.text_input(
+                "Meta Ads — ID konta reklamowego",
+                placeholder="act_123456789",
+                key="new_client_meta_id_manual",
+                help="Brak kont przypisanych do System Usera — wpisz ID ręcznie.",
+            ).strip()
+        else:
+            new_meta_opts = {"— pomiń (bez Meta Ads) —": ""}
+            for acc in new_meta_accs:
+                status = {1: "🟢", 2: "🔴", 3: "🟡", 7: "🟠", 9: "🟡"}.get(
+                    acc.get("account_status", 0), "⚪"
+                )
+                label = f"{status} {acc.get('name', '?')}  ({acc.get('id', '')})"
+                new_meta_opts[label] = acc.get("id", "")
+
+            new_meta_choice = st.selectbox(
+                "Konto reklamowe Meta",
+                list(new_meta_opts.keys()),
+                key="new_client_meta_account_sel",
+            )
+            new_meta_account_id = new_meta_opts[new_meta_choice]
+
+            # Po wyborze konta — pokaż listę kampanii do przypisania
+            if new_meta_account_id:
+                try:
+                    new_meta_camps = _fetch_meta_campaigns_cached(
+                        new_meta_account_id, meta_token_new
+                    )
+                except Exception as e:
+                    st.warning(f"Nie udało się pobrać kampanii: {e}")
+                    new_meta_camps = []
+
+                if new_meta_camps:
+                    new_camp_opts = {}
+                    for c in new_meta_camps:
+                        status_icon = "🟢" if c.get("status") == "ACTIVE" else "⚪"
+                        label = f"{status_icon} {c.get('name', '?')}"
+                        new_camp_opts[label] = c["id"]
+
+                    new_camp_labels = st.multiselect(
+                        "Kampanie tego klienta",
+                        options=list(new_camp_opts.keys()),
+                        key="new_client_camp_sel",
+                        help="Tylko zaznaczone kampanie trafią do raportu tego klienta.",
+                    )
+                    new_meta_campaign_ids = [
+                        new_camp_opts[lbl] for lbl in new_camp_labels
+                    ]
+                else:
+                    st.caption("Brak kampanii w tym koncie.")
+
+    st.markdown("&nbsp;", unsafe_allow_html=True)
+
+    # ── Formularz z pozostałymi polami ──
     with st.form("add_client_form", clear_on_submit=True):
         name = st.text_input(
             "Nazwa klienta *",
@@ -1673,37 +1753,6 @@ def page_clients():
                 placeholder="np. 987654321",
                 help="ID property w Google Analytics 4. Znajdziesz je w: Ustawienia → Informacje o usłudze.",
             )
-        # Meta Ads — selectbox z listy kont jeśli token jest, inaczej text input
-        meta_token_new = os.environ.get("META_ACCESS_TOKEN")
-        meta_id = ""
-        if meta_token_new:
-            try:
-                meta_accs = _fetch_meta_accounts_cached(meta_token_new)
-            except Exception:
-                meta_accs = []
-            if meta_accs:
-                meta_opts = {"— pomiń (skonfigurujesz później) —": ""}
-                for acc in meta_accs:
-                    status_label = {1: "🟢", 2: "🔴", 3: "🟡"}.get(
-                        acc.get("account_status", 0), "⚪"
-                    )
-                    label = f"{status_label} {acc.get('name', '?')}  ({acc.get('id', '')})"
-                    meta_opts[label] = acc.get("id", "")
-                meta_choice = st.selectbox(
-                    "Meta Ads — konto reklamowe (opcjonalnie)",
-                    list(meta_opts.keys()),
-                    help="Po dodaniu klienta będziesz mógł wybrać kampanie do raportu.",
-                )
-                meta_id = meta_opts[meta_choice]
-            else:
-                meta_id = st.text_input(
-                    "Meta Ads — ID konta reklamowego (opcjonalnie)",
-                    placeholder="act_123456789",
-                    help="Brak dostępnych kont — wpisz ID ręcznie lub przypisz konto do System Usera.",
-                )
-        else:
-            st.caption("Aby skonfigurować Meta Ads dla nowego klienta — najpierw dodaj token w Ustawieniach.")
-
         profile = st.text_area(
             "Profil działalności",
             height=120,
@@ -1735,7 +1784,8 @@ def page_clients():
                     "name": name.strip(),
                     "ads_customer_id": ads_id.strip(),
                     "ga4_property_id": ga4_id.strip(),
-                    "meta_ad_account_id": meta_id.strip(),
+                    "meta_ad_account_id": new_meta_account_id,
+                    "meta_campaign_ids": new_meta_campaign_ids,
                     "business_profile": profile.strip(),
                 }
                 if new_logo is not None:
@@ -1744,7 +1794,15 @@ def page_clients():
                     new_client["logo_mime"] = mime
                 cfg["clients"].append(new_client)
                 save_config(cfg)
-                st.success(f"Dodano klienta: **{name.strip()}**")
+                # Wyczyść stany Meta — żeby przy dodawaniu kolejnego klienta startował pusty
+                for k in ("new_client_meta_account_sel", "new_client_camp_sel",
+                          "new_client_meta_id_manual"):
+                    st.session_state.pop(k, None)
+                meta_summary = (
+                    f" + {len(new_meta_campaign_ids)} kampanii Meta"
+                    if new_meta_campaign_ids else ""
+                )
+                st.success(f"Dodano klienta: **{name.strip()}**{meta_summary}")
                 st.rerun()
 
 
