@@ -75,8 +75,8 @@ def build_charts_html(ads_data: dict, ga4_data: dict) -> str:
                 height=400, margin=dict(t=50, b=80, l=60, r=60),
                 **PLOT_LAYOUT,
             )
-            sections.append('<h2>Wyniki kampanii Google Ads</h2>')
-            sections.append(pio.to_html(fig, include_plotlyjs="cdn", full_html=False, config=PLOT_CONFIG))
+            chart = pio.to_html(fig, include_plotlyjs="cdn", full_html=False, config=PLOT_CONFIG)
+            sections.append(f'<div class="chart-block"><h2>Wyniki kampanii Google Ads</h2>{chart}</div>')
 
     # ── Wykres: Źródła ruchu (donut) ───────────────────────────────────────
     if ga4_data:
@@ -95,8 +95,8 @@ def build_charts_html(ads_data: dict, ga4_data: dict) -> str:
                 height=420, margin=dict(t=50, b=20, l=20, r=20),
                 **PLOT_LAYOUT,
             )
-            sections.append('<h2>Źródła ruchu</h2>')
-            sections.append(pio.to_html(fig, include_plotlyjs=False, full_html=False, config=PLOT_CONFIG))
+            chart = pio.to_html(fig, include_plotlyjs=False, full_html=False, config=PLOT_CONFIG)
+            sections.append(f'<div class="chart-block"><h2>Źródła ruchu</h2>{chart}</div>')
 
     # ── Wykres: Konwersje GA4 per zdarzenie ────────────────────────────────
     if ga4_data:
@@ -119,8 +119,8 @@ def build_charts_html(ads_data: dict, ga4_data: dict) -> str:
                 yaxis=dict(autorange="reversed"),
                 **PLOT_LAYOUT,
             )
-            sections.append('<h2>Konwersje na stronie</h2>')
-            sections.append(pio.to_html(fig, include_plotlyjs=False, full_html=False, config=PLOT_CONFIG))
+            chart = pio.to_html(fig, include_plotlyjs=False, full_html=False, config=PLOT_CONFIG)
+            sections.append(f'<div class="chart-block"><h2>Konwersje na stronie</h2>{chart}</div>')
 
     return "\n".join(sections)
 
@@ -221,10 +221,43 @@ def report_to_html(
     font-weight: 700;
     color: #1A3A5C;
   }}
+  .chart-block {{
+    margin: 8px 0 24px;
+  }}
   @media print {{
-    body {{ margin: 20px; max-width: none; }}
-    .report-header {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-    .kpi-card {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+    body {{
+      margin: 14mm;
+      max-width: none;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }}
+    * {{
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }}
+    /* Nie dziel tych elementów między stronami */
+    .chart-block,
+    .kpi-card,
+    .report-header,
+    table,
+    tr,
+    img,
+    .plotly-graph-div,
+    .js-plotly-plot {{
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }}
+    /* Nagłówek sekcji nie zostaje sam na końcu strony */
+    h2, h3 {{
+      break-after: avoid;
+      page-break-after: avoid;
+    }}
+    /* KPI: cały rząd kart razem */
+    .kpi-grid {{
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }}
+    thead {{ display: table-header-group; }}
   }}
 </style>
 </head>
