@@ -129,110 +129,158 @@ ACCENT2_L  = "#1A3A5C"
 def show_landing() -> None:
     st.markdown("""
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700;800&display=swap');
         [data-testid="stSidebar"] { display: none !important; }
         .block-container { padding-top: 0 !important; max-width: 980px; }
+
+        .landing-h { font-family:'Fira Sans', system-ui, sans-serif; }
+
         .feature-card {
             background:#fff;
-            border-radius:14px;
-            padding:24px 22px;
-            height:200px;
-            box-shadow:0 2px 12px rgba(0,0,0,0.06);
+            border-radius:16px;
+            padding:26px 22px;
+            height:218px;
+            box-shadow:0 1px 3px rgba(16,30,54,0.06), 0 8px 24px rgba(16,30,54,0.05);
+            border:1px solid #EAEEF3;
             border-top:3px solid var(--card-accent, #E8630A);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         .feature-card:hover {
-            transform: translateY(-3px);
-            box-shadow:0 8px 20px rgba(0,0,0,0.10);
+            transform: translateY(-4px);
+            box-shadow:0 12px 28px rgba(16,30,54,0.12);
         }
         .feature-icon {
-            font-size:1.8rem;
-            line-height:1;
-            margin-bottom:10px;
+            width:48px; height:48px; border-radius:12px;
+            display:flex; align-items:center; justify-content:center;
+            margin-bottom:14px;
+            background:var(--icon-bg, rgba(232,99,10,0.10));
+            color:var(--card-accent, #E8630A);
         }
         .source-badge {
-            display:inline-block;
-            background:rgba(255,255,255,0.18);
-            color:white;
-            padding:5px 12px;
-            border-radius:20px;
-            font-size:0.8rem;
+            display:inline-flex; align-items:center; gap:6px;
+            background:rgba(255,255,255,0.16);
+            border:1px solid rgba(255,255,255,0.25);
+            color:#fff;
+            padding:6px 14px;
+            border-radius:999px;
+            font-size:0.82rem;
             margin:0 4px;
             font-weight:600;
         }
-        .step-row {
-            display:flex;
-            align-items:center;
-            gap:14px;
-            margin:14px 0;
+        .trust-line {
+            display:flex; flex-wrap:wrap; gap:18px; justify-content:center;
+            margin-top:22px;
         }
+        .trust-item {
+            display:inline-flex; align-items:center; gap:7px;
+            color:rgba(255,255,255,0.92); font-size:0.86rem; font-weight:500;
+        }
+        .trust-item svg { color:#7CE8C4; flex-shrink:0; }
+
+        .step-row { display:flex; align-items:center; gap:14px; margin:14px 0; }
         .step-num {
-            min-width:34px;
-            height:34px;
-            border-radius:50%;
-            background:#1A3A5C;
-            color:white;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            font-weight:700;
-            font-size:0.95rem;
+            min-width:34px; height:34px; border-radius:50%;
+            background:#1A3A5C; color:white;
+            display:flex; align-items:center; justify-content:center;
+            font-weight:700; font-size:0.95rem; flex-shrink:0;
+        }
+
+        .privacy-box {
+            background:linear-gradient(135deg,#102A43 0%,#1A3A5C 100%);
+            border-radius:18px; padding:34px 32px; margin:8px 0 4px;
+            color:#fff; position:relative; overflow:hidden;
+        }
+        .privacy-badges { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+        .privacy-badge {
+            display:inline-flex; align-items:center; gap:7px;
+            background:rgba(255,255,255,0.10);
+            border:1px solid rgba(255,255,255,0.18);
+            color:#fff; padding:8px 14px; border-radius:10px;
+            font-size:0.84rem; font-weight:600;
+        }
+        .privacy-badge svg { color:#F0A868; flex-shrink:0; }
+
+        /* Dostepnosc: wyrazne focus ringi (WCAG) */
+        [data-testid="stTextInput"] input:focus,
+        .stButton button:focus-visible,
+        [data-testid="stFormSubmitButton"] button:focus-visible {
+            outline:3px solid #E8630A !important;
+            outline-offset:2px !important;
+        }
+        /* Szacunek dla preferencji ograniczenia ruchu */
+        @media (prefers-reduced-motion: reduce) {
+            .feature-card { transition:none !important; }
+            .feature-card:hover { transform:none !important; }
         }
     </style>""", unsafe_allow_html=True)
 
+    _check = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+
     st.markdown(f"""
     <div style="background:linear-gradient(135deg,{ACCENT2_L} 0%,{ACCENT_L} 100%);
-                padding:60px 40px 52px;border-radius:0 0 24px 24px;text-align:center;margin-bottom:36px">
-        <p style="color:rgba(255,255,255,0.8);font-size:0.85rem;margin:0 0 14px;letter-spacing:.15em;text-transform:uppercase;font-weight:600">
+                padding:62px 40px 50px;border-radius:0 0 24px 24px;text-align:center;margin-bottom:38px">
+        <p style="color:rgba(255,255,255,0.82);font-size:0.85rem;margin:0 0 16px;letter-spacing:.18em;text-transform:uppercase;font-weight:700">
             Raport Gotowy
         </p>
-        <h1 style="color:white;margin:0;font-size:2.6rem;font-weight:800;line-height:1.15">
+        <h1 class="landing-h" style="color:white;margin:0;font-size:2.7rem;font-weight:800;line-height:1.12;letter-spacing:-0.01em">
             Raporty z 3 platform<br>gotowe w 30 sekund
         </h1>
-        <div style="margin:22px 0 14px">
+        <p style="color:rgba(255,255,255,0.88);margin:18px auto 4px;font-size:1.08rem;max-width:590px;line-height:1.55">
+            Podłącz konta reklamowe i analitykę — narzędzie pobierze dane, porówna kanały
+            i wygeneruje profesjonalny raport z analizą wykonaną przez AI.
+        </p>
+        <div style="margin:24px 0 4px">
             <span class="source-badge">Google Ads</span>
             <span class="source-badge">Meta Ads</span>
             <span class="source-badge">Google Analytics 4</span>
         </div>
-        <p style="color:rgba(255,255,255,0.85);margin:18px auto 0;font-size:1.05rem;max-width:580px;line-height:1.5">
-            Podłącz konta reklamowe i analitykę — aplikacja pobierze dane, porówna kanały
-            i wygeneruje profesjonalny raport z analizą wykonaną przez AI.
-        </p>
+        <div class="trust-line">
+            <span class="trust-item">{_check}&nbsp;100% darmowe</span>
+            <span class="trust-item">{_check}&nbsp;Non-profit</span>
+            <span class="trust-item">{_check}&nbsp;Twoje klucze zostają u Ciebie</span>
+        </div>
     </div>""", unsafe_allow_html=True)
 
-    # Features — 3 źródła danych
+    # Features — 3 źródła danych (ikony SVG, nie emoji)
+    _ic_ads = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>'
+    _ic_meta = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>'
+    _ic_ga4 = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'
+
     c1, c2, c3 = st.columns(3)
-    for col, icon, title, desc, accent in [
-        (c1, "📈", "Google Ads",
+    for col, icon, ic_bg, title, desc, accent in [
+        (c1, _ic_ads, "rgba(66,133,244,0.10)", "Google Ads",
          "Kampanie, kliknięcia, CTR, średni CPC, wydatki — pełne dane z Search, Performance Max i Display.",
          "#4285F4"),
-        (c2, "📱", "Meta Ads",
+        (c2, _ic_meta, "rgba(8,102,255,0.10)", "Meta Ads",
          "Wyniki kampanii Facebook i Instagram. Liczba leadów z formularzy błyskawicznych i koszt pozyskania (CPL).",
          "#0866FF"),
-        (c3, "🔍", "Google Analytics 4",
+        (c3, _ic_ga4, "rgba(249,171,0,0.12)", "Google Analytics 4",
          "Ruch na stronie, źródła wizyt, czas wizyty, zaangażowanie i konwersje GA4.",
-         "#F9AB00"),
+         "#E89400"),
     ]:
         col.markdown(f"""
-        <div class="feature-card" style="--card-accent:{accent}">
+        <div class="feature-card" style="--card-accent:{accent};--icon-bg:{ic_bg}">
             <div class="feature-icon">{icon}</div>
-            <p style="font-weight:700;color:{ACCENT2_L};margin:6px 0 8px;font-size:1.1rem">{title}</p>
-            <p style="color:#555;font-size:0.88rem;margin:0;line-height:1.5">{desc}</p>
+            <p class="landing-h" style="font-weight:700;color:{ACCENT2_L};margin:0 0 8px;font-size:1.12rem">{title}</p>
+            <p style="color:#334155;font-size:0.9rem;margin:0;line-height:1.55">{desc}</p>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("<br><br>", unsafe_allow_html=True)
 
     # AI + sposób działania
+    _ic_ai = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg>'
+
     cc1, cc2 = st.columns([1, 1])
     with cc1:
         st.markdown(f"""
         <div style="background:linear-gradient(135deg,#FFF8F3 0%,#FFE8D6 100%);
-                    border-radius:14px;padding:28px 24px;height:240px;
-                    border-left:4px solid {ACCENT_L}">
-            <div style="font-size:1.6rem;margin-bottom:6px">🤖</div>
-            <p style="font-weight:700;color:{ACCENT2_L};font-size:1.15rem;margin:8px 0 10px">
+                    border-radius:16px;padding:28px 26px;height:248px;
+                    border:1px solid #F3E3D6;border-left:4px solid {ACCENT_L}">
+            <div class="feature-icon" style="--icon-bg:rgba(232,99,10,0.12);--card-accent:{ACCENT_L};width:44px;height:44px">{_ic_ai}</div>
+            <p class="landing-h" style="font-weight:700;color:{ACCENT2_L};font-size:1.18rem;margin:0 0 10px">
                 Analiza wykonana przez AI
             </p>
-            <p style="color:#444;font-size:0.92rem;margin:0;line-height:1.55">
+            <p style="color:#334155;font-size:0.94rem;margin:0;line-height:1.6">
                 AI porównuje skuteczność Google Ads i Meta Ads, łączy je z danymi GA4,
                 wyciąga wnioski i rekomenduje działania — w języku zrozumiałym dla właściciela firmy.
             </p>
@@ -240,24 +288,55 @@ def show_landing() -> None:
 
     with cc2:
         st.markdown(f"""
-        <div style="background:#fff;border-radius:14px;padding:24px 24px;height:240px;
-                    box-shadow:0 2px 12px rgba(0,0,0,0.06)">
-            <p style="font-weight:700;color:{ACCENT2_L};font-size:1.05rem;margin:0 0 10px">
+        <div style="background:#fff;border-radius:16px;padding:26px 26px;height:248px;
+                    border:1px solid #EAEEF3;box-shadow:0 1px 3px rgba(16,30,54,0.06)">
+            <p class="landing-h" style="font-weight:700;color:{ACCENT2_L};font-size:1.08rem;margin:0 0 14px">
                 Jak to działa
             </p>
             <div class="step-row">
                 <div class="step-num">1</div>
-                <div style="color:#444;font-size:0.9rem">Podłącz konta API (Google Ads, Meta, GA4)</div>
+                <div style="color:#334155;font-size:0.92rem">Podłącz własne klucze API (Google Ads, Meta, GA4)</div>
             </div>
             <div class="step-row">
                 <div class="step-num">2</div>
-                <div style="color:#444;font-size:0.9rem">Wybierz klienta i okres raportu</div>
+                <div style="color:#334155;font-size:0.92rem">Wybierz klienta i okres raportu</div>
             </div>
             <div class="step-row">
                 <div class="step-num">3</div>
-                <div style="color:#444;font-size:0.9rem">Pobierz raport (.md/.html) lub wyślij emailem</div>
+                <div style="color:#334155;font-size:0.92rem">Pobierz raport (.md/.html) lub wyślij emailem</div>
             </div>
         </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Sekcja: prywatne pudełko na klucze (non-profit) ──
+    _ic_shield = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>'
+    _bcheck = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+    st.markdown(f"""
+    <div class="privacy-box">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:6px">
+            <div style="width:52px;height:52px;border-radius:14px;background:rgba(240,168,104,0.16);
+                        display:flex;align-items:center;justify-content:center;color:#F0A868;flex-shrink:0">
+                {_ic_shield}
+            </div>
+            <h2 class="landing-h" style="color:#fff;margin:0;font-size:1.5rem;font-weight:700;border:none;padding:0">
+                Twoje prywatne pudełko na klucze
+            </h2>
+        </div>
+        <p style="color:rgba(255,255,255,0.88);font-size:1rem;line-height:1.65;max-width:760px;margin:14px 0 0">
+            Raport Gotowy to narzędzie <b style="color:#F0A868">non-profit — całkowicie darmowe</b>.
+            Działa jak Twoje prywatne pudełko: wrzucasz do niego własne klucze API (OpenAI, Google, Meta),
+            a one zostają zaszyfrowane i dostępne wyłącznie dla Ciebie. Nie pobieramy żadnych opłat,
+            nie sprzedajemy danych i nie zaglądamy do Twoich raportów. Płacisz tylko za to, czego naprawdę
+            używasz — bezpośrednio u dostawców. My nie zarabiamy na tym ani grosza.
+        </p>
+        <div class="privacy-badges">
+            <span class="privacy-badge">{_bcheck}&nbsp;Zero opłat i prowizji</span>
+            <span class="privacy-badge">{_bcheck}&nbsp;Klucze szyfrowane (AES)</span>
+            <span class="privacy-badge">{_bcheck}&nbsp;Dane tylko Twoje</span>
+            <span class="privacy-badge">{_bcheck}&nbsp;Możesz usunąć konto w każdej chwili</span>
+        </div>
+    </div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
