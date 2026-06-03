@@ -324,17 +324,18 @@ def show_landing() -> None:
             </h2>
         </div>
         <p style="color:rgba(255,255,255,0.88);font-size:1rem;line-height:1.65;max-width:760px;margin:14px 0 0">
-            Raport Gotowy to narzędzie <b style="color:#F0A868">non-profit — całkowicie darmowe</b>.
+            Raport Gotowy to narzędzie <b style="color:#F0A868">od marketerów dla marketerów</b>.
             Działa jak Twoje prywatne pudełko: wrzucasz do niego własne klucze API (OpenAI, Google, Meta),
             a one zostają zaszyfrowane i dostępne wyłącznie dla Ciebie. Nie pobieramy żadnych opłat,
             nie sprzedajemy danych i nie zaglądamy do Twoich raportów. Płacisz tylko za to, czego naprawdę
             używasz — bezpośrednio u dostawców. My nie zarabiamy na tym ani grosza.
         </p>
+        <p style="color:#F0A868;font-size:1.02rem;line-height:1.6;max-width:760px;margin:14px 0 0;font-weight:600;font-style:italic">
+            Skorzystaj i poleć narzędzie dalej w świat. Niech życie będzie łatwiejsze, niekoniecznie droższe.
+        </p>
         <div class="privacy-badges">
             <span class="privacy-badge">{_bcheck}&nbsp;Zero opłat i prowizji</span>
             <span class="privacy-badge">{_bcheck}&nbsp;Klucze szyfrowane (AES)</span>
-            <span class="privacy-badge">{_bcheck}&nbsp;Dane tylko Twoje</span>
-            <span class="privacy-badge">{_bcheck}&nbsp;Możesz usunąć konto w każdej chwili</span>
         </div>
     </div>""", unsafe_allow_html=True)
 
