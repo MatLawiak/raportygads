@@ -679,13 +679,14 @@ TYDZIEŃ: {period_label}
 Pisz po polsku. Prosto, bez żargonu. Maksymalnie 350 słów łącznie."""
 
 
-def generate_report(prompt: str) -> str:
+def generate_report(prompt: str, api_key: str | None = None) -> str:
     """
     Generuje raport przy użyciu OpenAI API (gpt-4o-mini).
+    api_key: klucz przekazany jawnie (per użytkownik). Gdy None — fallback na env.
     """
     from openai import OpenAI
 
-    client = OpenAI()  # używa zmiennej OPENAI_API_KEY
+    client = OpenAI(api_key=api_key) if api_key else OpenAI()
 
     system_prompt = (
         "Jesteś doświadczonym specjalistą marketingu cyfrowego — Google Ads, Meta Ads, SEO i analityki internetowej — "

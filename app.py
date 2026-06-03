@@ -402,22 +402,21 @@ GA4_CREDS_PATH   = BASE_DIR / f"ga4_{_uid}.json"
 GADS_YAML_PATH   = BASE_DIR / f"gads_{_uid}.yaml"
 
 # Odtwórz dane z Supabase przy starcie sesji (raz per login)
+# WAŻNE: sekrety (OpenAI, Meta) trzymamy w st.session_state — izolowane per sesja.
+# NIE w os.environ ani .env, bo na Streamlit Cloud proces jest WSPÓLNY dla wszystkich
+# użytkowników i globalne zmienne wyciekałyby między kontami.
 if st.session_state.get("config_user") != _uid:
     _ud = auth.load_user_data(_uid)
 
-    if _ud.get("openai_key"):
-        os.environ["OPENAI_API_KEY"] = _ud["openai_key"]
-
-    if _ud.get("meta_token"):
-        os.environ["META_ACCESS_TOKEN"] = _ud["meta_token"]
+    # Zawsze ustaw (także pusty string) — nowy użytkownik nie dziedziczy cudzych kluczy
+    st.session_state.openai_key = _ud.get("openai_key") or ""
+    st.session_state.meta_token = _ud.get("meta_token") or ""
 
     if _ud.get("gads_yaml"):
         GADS_YAML_PATH.write_text(_ud["gads_yaml"], encoding="utf-8")
-        os.environ["GOOGLE_ADS_CONFIGURATION_FILE_PATH"] = str(GADS_YAML_PATH)
 
     if _ud.get("ga4_json"):
         GA4_CREDS_PATH.write_text(_ud["ga4_json"], encoding="utf-8")
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
 
     if _ud.get("config_json"):
         try:
@@ -429,9 +428,6 @@ if st.session_state.get("config_user") != _uid:
         st.session_state.config = load_config()
 
     st.session_state.config_user = _uid
-
-elif GA4_CREDS_PATH.exists():
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(GA4_CREDS_PATH)
 
 cfg: dict = st.session_state.config
 
@@ -448,12 +444,12 @@ with st.sidebar:
     )
     st.markdown("---")
 
-    # Szybki status API
-    openai_ok = bool(os.environ.get("OPENAI_API_KEY"))
+    # Szybki status API (sekrety z sesji — per użytkownik)
+    openai_ok = bool(st.session_state.get("openai_key"))
     gads_ok   = GADS_YAML_PATH.exists()
     ga4_ok    = GA4_CREDS_PATH.exists()
 
-    meta_ok = bool(os.environ.get("META_ACCESS_TOKEN"))
+    meta_ok = bool(st.session_state.get("meta_token"))
 
     st.caption("Status API")
     st.write("🟢 OpenAI" if openai_ok else "🔴 OpenAI — brak klucza")
@@ -572,7 +568,7 @@ def generate_full_report(
     business_profile = client.get("business_profile", "")
 
     meta_data: dict | None = None
-    meta_token = os.environ.get("META_ACCESS_TOKEN")
+    meta_token = st.session_state.get("meta_token")
     meta_account_id = client.get("meta_ad_account_id", "").strip()
     if meta_token and meta_account_id:
         try:
@@ -590,7 +586,7 @@ def generate_full_report(
     else:
         prompt = build_report_prompt(client["name"], period_label, ads_data, ga4_data, business_profile, meta_data=meta_data)
 
-    report_text = generate_report(prompt)
+    report_text = generate_report(prompt, api_key=st.session_state.get("openai_key"))
 
     safe_name = client["name"].replace(" ", "_").lower()
     suffix = "_tyg" if report_type == "Tygodniowy" else ""
@@ -1268,7 +1264,7 @@ def page_generate():
     st.markdown("---")
 
     if st.button("▶ Generuj raport", type="primary", use_container_width=True):
-        if not os.environ.get("OPENAI_API_KEY"):
+        if not st.session_state.get("openai_key"):
             st.error("Brak klucza OpenAI. Przejdź do **Ustawienia** i dodaj swój klucz API OpenAI.")
         else:
             with st.spinner("Pobieranie danych z Google Ads, GA4 i Meta Ads..."):
@@ -1382,7 +1378,7 @@ def _render_client_meta_section(i: int, client: dict) -> None:
     """Sekcja Meta dla pojedynczego klienta — wybór konta + kampanii."""
     st.markdown("**Meta Ads**")
 
-    meta_token = os.environ.get("META_ACCESS_TOKEN")
+    meta_token = st.session_state.get("meta_token")
     if not meta_token:
         st.info(
             "Aby skonfigurować Meta Ads dla tego klienta — wklej **System User Token** "
@@ -1490,7 +1486,7 @@ def _render_client_meta_section(i: int, client: dict) -> None:
 
 def _render_meta_campaign_assignment(clients: list) -> None:
     """Dedykowana sekcja do przypisywania kampanii Meta do klientów."""
-    meta_token = os.environ.get("META_ACCESS_TOKEN")
+    meta_token = st.session_state.get("meta_token")
     if not meta_token:
         return
     if not clients:
@@ -1743,7 +1739,7 @@ def page_clients():
     st.subheader("Dodaj nowego klienta")
 
     # ── Meta Ads — POZA formą, żeby selectbox + multiselect były reaktywne ──
-    meta_token_new = os.environ.get("META_ACCESS_TOKEN")
+    meta_token_new = st.session_state.get("meta_token")
     new_meta_account_id = ""
     new_meta_campaign_ids: list[str] = []
 
@@ -1919,7 +1915,7 @@ def page_settings():
         "Pobierz go na platform.openai.com → API keys."
     )
 
-    current_openai = os.environ.get("OPENAI_API_KEY", "")
+    current_openai = st.session_state.get("openai_key", "")
     with st.form("openai_key_form"):
         openai_input = st.text_input(
             "Klucz API OpenAI",
@@ -1930,7 +1926,7 @@ def page_settings():
         if st.form_submit_button("Zapisz klucz OpenAI", type="primary"):
             val = openai_input.strip()
             if val.startswith("sk-"):
-                update_env_key("OPENAI_API_KEY", val)
+                st.session_state.openai_key = val
                 auth.save_user_data(_uid, {"openai_key": val})
                 st.success("Klucz OpenAI zapisany.")
                 st.rerun()
@@ -1948,7 +1944,7 @@ def page_settings():
         "Wygeneruj go w: Business Settings → System Users → Generuj token."
     )
 
-    current_meta_token = os.environ.get("META_ACCESS_TOKEN", "")
+    current_meta_token = st.session_state.get("meta_token", "")
     with st.form("meta_token_form"):
         meta_token_input = st.text_input(
             "Token dostępu Meta",
@@ -1959,9 +1955,8 @@ def page_settings():
         if st.form_submit_button("Zapisz token Meta", type="primary"):
             val = meta_token_input.strip()
             if val:
-                update_env_key("META_ACCESS_TOKEN", val)
+                st.session_state.meta_token = val
                 auth.save_user_data(_uid, {"meta_token": val})
-                os.environ["META_ACCESS_TOKEN"] = val
                 st.success("Token Meta zapisany.")
                 st.rerun()
             else:
@@ -2240,7 +2235,7 @@ def page_settings():
     st.markdown("---")
     st.subheader("Status konfiguracji API")
 
-    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    openai_key = st.session_state.get("openai_key", "")
     gads_yaml  = GADS_YAML_PATH.exists()
     ga4_creds  = str(GA4_CREDS_PATH) if GA4_CREDS_PATH.exists() else ""
 
