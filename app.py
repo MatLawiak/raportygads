@@ -1,5 +1,5 @@
 """
-Generator Raportów Marketingowych — interfejs Streamlit
+Raport Gotowy — interfejs Streamlit
 
 Uruchomienie:
     streamlit run app.py
@@ -90,7 +90,7 @@ def save_config(cfg: dict) -> None:
 # ─── Konfiguracja strony ──────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Generator Raportów Marketingowych",
+    page_title="Raport Gotowy",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -183,7 +183,7 @@ def show_landing() -> None:
     <div style="background:linear-gradient(135deg,{ACCENT2_L} 0%,{ACCENT_L} 100%);
                 padding:60px 40px 52px;border-radius:0 0 24px 24px;text-align:center;margin-bottom:36px">
         <p style="color:rgba(255,255,255,0.8);font-size:0.85rem;margin:0 0 14px;letter-spacing:.15em;text-transform:uppercase;font-weight:600">
-            Generator Raportów Marketingowych
+            Raport Gotowy
         </p>
         <h1 style="color:white;margin:0;font-size:2.6rem;font-weight:800;line-height:1.15">
             Raporty z 3 platform<br>gotowe w 30 sekund
@@ -358,7 +358,7 @@ cfg: dict = st.session_state.config
 # ─── Pasek boczny ─────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("### 📊 Raporty Marketingowe")
+    st.markdown("### 📊 Raport Gotowy")
     st.caption(st.session_state.user_email or "")
     st.markdown("---")
     page = st.radio(
@@ -2243,7 +2243,7 @@ def page_faq():
 
 1. Wejdź na stronę **platform.openai.com** i zaloguj się (lub załóż konto).
 2. W lewym menu kliknij **API keys**.
-3. Kliknij przycisk **Create new secret key** — nadaj mu dowolną nazwę np. *Raporty Marketingowe*.
+3. Kliknij przycisk **Create new secret key** — nadaj mu dowolną nazwę np. *Raport Gotowy*.
 4. Skopiuj wygenerowany klucz — zaczyna się od `sk-proj-...`
    > Uwaga: klucz jest widoczny tylko raz. Jeśli go zamkniesz bez skopiowania, musisz wygenerować nowy.
 5. Wklej klucz w **Ustawienia → OpenAI API Key** i kliknij *Zapisz*.
@@ -2459,7 +2459,7 @@ Hasła do aplikacji działają tylko gdy masz aktywną weryfikację dwuetapową.
 1. Na tej samej stronie Bezpieczeństwo wpisz w wyszukiwarce **"hasła do aplikacji"** lub przejdź do:
    `myaccount.google.com/apppasswords`
 2. Kliknij **Wybierz aplikację → Inna (niestandardowa nazwa)**
-3. Wpisz np. *Raporty Marketingowe* → kliknij *Generuj*
+3. Wpisz np. *Raport Gotowy* → kliknij *Generuj*
 4. Zobaczysz hasło w formacie: `xxxx xxxx xxxx xxxx` (16 znaków)
 5. Skopiuj je — jest widoczne tylko raz
 
