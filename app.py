@@ -568,7 +568,7 @@ def generate_full_report(
     business_profile = client.get("business_profile", "")
 
     meta_data: dict | None = None
-    meta_token = st.session_state.get("meta_token")
+    meta_token = _client_meta_token(client)
     meta_account_id = client.get("meta_ad_account_id", "").strip()
     if meta_token and meta_account_id:
         try:
@@ -1360,6 +1360,11 @@ def page_generate():
 
 # ─── Strona: Klienci ──────────────────────────────────────────────────────────
 
+def _client_meta_token(client: dict) -> str:
+    """Token Meta dla klienta: własny (gdy konto jest poza Twoim BM) lub globalny."""
+    return (client.get("meta_access_token") or "").strip() or st.session_state.get("meta_token", "")
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_meta_accounts_cached(token: str) -> list:
     """Cache na 5 min — nie odpytujemy API przy każdym renderze."""
@@ -1378,11 +1383,28 @@ def _render_client_meta_section(i: int, client: dict) -> None:
     """Sekcja Meta dla pojedynczego klienta — wybór konta + kampanii."""
     st.markdown("**Meta Ads**")
 
-    meta_token = st.session_state.get("meta_token")
+    # Token per-klient (gdy konto jest poza Twoim Business Managerem).
+    # Pusty = używamy globalnego tokenu z Ustawień.
+    client_token_val = st.text_input(
+        "Token Meta dla tego klienta (opcjonalnie)",
+        value=client.get("meta_access_token", ""),
+        type="password",
+        key=f"meta_cli_token_{i}",
+        help="Wypełnij TYLKO gdy konto reklomowe klienta jest poza Twoim Business Managerem "
+             "(globalny token go nie widzi). W przeciwnym razie zostaw puste — użyty będzie token globalny.",
+    )
+    if client_token_val.strip() != (client.get("meta_access_token") or ""):
+        if st.button("Zapisz token klienta", key=f"meta_cli_token_save_{i}"):
+            cfg["clients"][i]["meta_access_token"] = client_token_val.strip()
+            save_config(cfg)
+            st.cache_data.clear()  # odśwież cache list kont
+            st.rerun()
+
+    meta_token = _client_meta_token(client)
     if not meta_token:
         st.info(
-            "Aby skonfigurować Meta Ads dla tego klienta — wklej **System User Token** "
-            "w **Ustawienia → Meta Ads**."
+            "Brak tokenu Meta. Wklej **globalny** token w **Ustawienia → Meta Ads**, "
+            "albo **token tego klienta** w polu powyżej (gdy konto jest poza Twoim BM)."
         )
         return
 
@@ -1486,10 +1508,24 @@ def _render_client_meta_section(i: int, client: dict) -> None:
 
 def _render_meta_campaign_assignment(clients: list) -> None:
     """Dedykowana sekcja do przypisywania kampanii Meta do klientów."""
-    meta_token = st.session_state.get("meta_token")
-    if not meta_token:
-        return
     if not clients:
+        return
+
+    # Token dla danego konta: bierzemy z klienta który ma to konto (może mieć własny token),
+    # a w razie braku — globalny.
+    def _token_for_account(account_id: str) -> str:
+        for c in clients:
+            if (c.get("meta_ad_account_id", "") or "").strip() == account_id:
+                t = _client_meta_token(c)
+                if t:
+                    return t
+        return st.session_state.get("meta_token", "")
+
+    # Pokaż sekcję tylko gdy jest jakikolwiek token (globalny lub per-klient)
+    has_any_token = bool(st.session_state.get("meta_token")) or any(
+        (c.get("meta_access_token") or "").strip() for c in clients
+    )
+    if not has_any_token:
         return
 
     # Zbierz unikalne konta reklamowe ze wszystkich klientów
@@ -1534,7 +1570,7 @@ def _render_meta_campaign_assignment(clients: list) -> None:
             with st.spinner("Pobieranie kampanii..."):
                 try:
                     from meta_ads import list_meta_campaigns
-                    camps = list_meta_campaigns(selected_account, meta_token)
+                    camps = list_meta_campaigns(selected_account, _token_for_account(selected_account))
                     st.session_state["meta_assign_campaigns"] = camps
                     st.session_state["meta_assign_account_id"] = selected_account
                     st.success(f"Pobrano {len(camps)} kampanii.")
@@ -1739,15 +1775,25 @@ def page_clients():
     st.subheader("Dodaj nowego klienta")
 
     # ── Meta Ads — POZA formą, żeby selectbox + multiselect były reaktywne ──
-    meta_token_new = st.session_state.get("meta_token")
     new_meta_account_id = ""
     new_meta_campaign_ids: list[str] = []
 
     st.markdown("**Meta Ads (opcjonalnie)**")
+
+    # Token per-klient (gdy konto jest poza Twoim BM). Pusty = token globalny.
+    new_meta_token = st.text_input(
+        "Token Meta dla tego klienta (opcjonalnie)",
+        type="password",
+        key="new_client_meta_token",
+        help="Wypełnij gdy konto reklamowe klienta jest poza Twoim Business Managerem "
+             "(globalny token go nie widzi). Inaczej zostaw puste — użyty będzie token globalny.",
+    ).strip()
+    meta_token_new = new_meta_token or st.session_state.get("meta_token", "")
+
     if not meta_token_new:
         st.caption(
-            "Aby przypisać konto i kampanie Meta przy dodawaniu klienta — "
-            "najpierw dodaj token w **Ustawienia → Meta Ads**."
+            "Aby przypisać konto Meta — dodaj globalny token w **Ustawienia → Meta Ads** "
+            "albo wklej **token tego klienta** powyżej."
         )
     else:
         try:
@@ -1861,6 +1907,7 @@ def page_clients():
                     "ads_customer_id": ads_id.strip(),
                     "ga4_property_id": ga4_id.strip(),
                     "meta_ad_account_id": new_meta_account_id,
+                    "meta_access_token": new_meta_token,
                     "meta_campaign_ids": new_meta_campaign_ids,
                     "business_profile": profile.strip(),
                 }
