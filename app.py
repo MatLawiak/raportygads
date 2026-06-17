@@ -589,7 +589,7 @@ def generate_full_report(
     report_text = generate_report(prompt, api_key=st.session_state.get("openai_key"))
 
     safe_name = client["name"].replace(" ", "_").lower()
-    suffix = "_tyg" if report_type == "Tygodniowy" else ""
+    suffix = {"Tygodniowy": "_tyg", "Pełny okres": "_pelny"}.get(report_type, "")
     filename = f"raport_{safe_name}_{date_from[:7]}{suffix}.md"
     path = REPORTS_DIR / filename
     path.write_text(report_text, encoding="utf-8")
@@ -1226,7 +1226,7 @@ def page_generate():
         )
         selected_client = next(c for c in clients if c["name"] == selected_name)
     with col2:
-        report_type = st.selectbox("Typ raportu", ["Miesięczny", "Tygodniowy"])
+        report_type = st.selectbox("Typ raportu", ["Miesięczny", "Tygodniowy", "Pełny okres"])
 
     if report_type == "Miesięczny":
         import calendar
@@ -1256,7 +1256,22 @@ def page_generate():
         date_from   = f"{selected_year}-{selected_month:02d}-01"
         date_to     = f"{selected_year}-{selected_month:02d}-{last_day:02d}"
         period_label = f"{months_pl[selected_month - 1]} {selected_year}"
-    else:
+    elif report_type == "Pełny okres":
+        today = date.today()
+        # Domyślnie ostatnie 12 miesięcy — użytkownik może rozszerzyć dowolnie
+        default_from = today.replace(year=today.year - 1)
+        st.caption("Wybierz zakres obejmujący całość działań klienta (np. od startu współpracy do dziś).")
+        dc1, dc2 = st.columns(2)
+        with dc1:
+            d_from = st.date_input("Od", value=default_from, key="full_from")
+        with dc2:
+            d_to = st.date_input("Do", value=today, key="full_to")
+        if d_from > d_to:
+            st.error("Data „Od\" nie może być późniejsza niż „Do\".")
+        date_from = str(d_from)
+        date_to = str(d_to)
+        period_label = f"{d_from.strftime('%d.%m.%Y')} – {d_to.strftime('%d.%m.%Y')}"
+    else:  # Tygodniowy
         date_from, date_to = get_last_full_week()
         period_label = f"{date_from} – {date_to}"
 
