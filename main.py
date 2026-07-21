@@ -708,6 +708,14 @@ def generate_report(prompt: str, api_key: str | None = None) -> str:
         "Wstawiasz tabele DOKŁADNIE w takiej formie, w jakiej są podane w prompcie — nie konwertuj ich na bullet listy."
     )
 
+    # Wiedza strategiczna (Księga Adsów 4.0) — wzbogaca rekomendacje.
+    # Meta-first: pełne frameworki dla Meta, zasady przekrojowe dla Google/GA4.
+    try:
+        from wiedza_adsy import WIEDZA_ADSY
+        system_prompt = system_prompt + "\n\n" + WIEDZA_ADSY
+    except Exception:
+        pass  # brak pliku wiedzy = raport generuje się normalnie
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=4096,
