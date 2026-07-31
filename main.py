@@ -183,6 +183,7 @@ def fetch_google_ads_data(customer_id: str, date_from: str, date_to: str) -> dic
         FROM campaign
         WHERE segments.date BETWEEN '{date_from}' AND '{date_to}'
           AND metrics.impressions > 0
+          AND campaign.status != 'REMOVED'
         ORDER BY metrics.cost_micros DESC
     """
 
